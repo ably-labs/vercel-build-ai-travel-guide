@@ -6,6 +6,7 @@ import { ConnectionBadge } from "@/components/connection-badge";
 import { DayBoard } from "@/components/day-board";
 import { MapPanel } from "@/components/map-panel";
 import { PresenceAvatars } from "@/components/presence-avatars";
+import { SelectedStopProvider } from "@/components/selected-stop";
 
 function Panel({
   title,
@@ -53,21 +54,25 @@ export function TripCanvas({ tripId }: { tripId: string }) {
         </div>
       </header>
 
-      <main className="grid flex-1 grid-cols-1 gap-3 overflow-auto p-3 lg:grid-cols-[1.2fr_1.6fr_1fr] lg:grid-rows-[2fr_1fr] lg:overflow-hidden">
-        {/* MapPanel renders its own panel chrome (and an expand/collapse
-            control), since it lifts out of the grid into a full-viewport
-            overlay when expanded. */}
-        <MapPanel tripId={tripId} />
-        <Panel title="Day board" className="min-h-48 lg:row-span-2">
-          <DayBoard tripId={tripId} />
-        </Panel>
-        <Panel title="Chat" className="min-h-96 lg:row-span-2">
-          <ChatPanel tripId={tripId} />
-        </Panel>
-        <Panel title="Budget" className="min-h-32">
-          <BudgetPanel tripId={tripId} />
-        </Panel>
-      </main>
+      {/* Selecting a stop in the day board flies the map to it, so both panels
+          share the selected-stop context. */}
+      <SelectedStopProvider>
+        <main className="grid flex-1 grid-cols-1 gap-3 overflow-auto p-3 lg:grid-cols-[1.2fr_1.6fr_1fr] lg:grid-rows-[2fr_1fr] lg:overflow-hidden">
+          {/* MapPanel renders its own panel chrome (and an expand/collapse
+              control), since it lifts out of the grid into a full-viewport
+              overlay when expanded. */}
+          <MapPanel tripId={tripId} />
+          <Panel title="Day board" className="min-h-48 lg:row-span-2">
+            <DayBoard tripId={tripId} />
+          </Panel>
+          <Panel title="Chat" className="min-h-96 lg:row-span-2">
+            <ChatPanel tripId={tripId} />
+          </Panel>
+          <Panel title="Budget" className="min-h-32">
+            <BudgetPanel tripId={tripId} />
+          </Panel>
+        </main>
+      </SelectedStopProvider>
     </div>
   );
 }
