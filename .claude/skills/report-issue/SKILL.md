@@ -1,3 +1,8 @@
+---
+name: report-issue
+description: File a Wayfarer bug or feature request in Jira under epic AIT-936 via the Ably MCP tools. Use when the user wants to report a bug, log an issue, or request a feature for Wayfarer.
+---
+
 Use the Ably MCP Jira tools to file a bug or feature request under the Wayfarer epic (AIT-936).
 
 ## Steps

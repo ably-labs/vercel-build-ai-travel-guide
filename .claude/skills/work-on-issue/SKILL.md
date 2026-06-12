@@ -1,3 +1,8 @@
+---
+name: work-on-issue
+description: Fetch a Wayfarer Jira ticket (under AIT-936), transition it to In Progress, and drive the implementation via /goal. Use when the user wants to start work on or pick up a Jira ticket.
+---
+
 Fetch a Wayfarer Jira ticket (under AIT-936) and work on it.
 
 ## Steps
