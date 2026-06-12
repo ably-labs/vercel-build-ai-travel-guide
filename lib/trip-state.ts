@@ -47,6 +47,18 @@ export const STOP_KIND_ICONS: Record<StopKind, string> = {
   sight: "📍",
 };
 
+// Human-readable budget category labels. Flights and ground transport both
+// roll up under "Travel" so the breakdown reads as a handful of intuitive
+// spending buckets rather than the raw stop taxonomy.
+export const STOP_KIND_LABELS: Record<StopKind, string> = {
+  flight: "Travel",
+  transport: "Travel",
+  hotel: "Lodging",
+  food: "Food",
+  activity: "Activities",
+  sight: "Sights",
+};
+
 export interface Destination {
   id: string;
   name: string;
@@ -74,6 +86,42 @@ export interface TripStateJson {
   days?: Record<string, DayJson>;
   destinations?: Record<string, Destination>;
   budget?: number;
+}
+
+// One row of the budget breakdown: a spending category, its summed expected
+// cost across all priced stops, and how many stops contributed.
+export interface BudgetCategory {
+  label: string;
+  total: number;
+  count: number;
+}
+
+// Group the trip's priced stops into spending categories (via STOP_KIND_LABELS)
+// and sum each. Returned highest-spend first; the per-category totals always
+// sum to the overall budget total derived from the same priced stops. Stops
+// without a positive numeric price are ignored, matching the budget counter.
+export function budgetByCategory(
+  days: Record<string, DayJson> | undefined,
+): BudgetCategory[] {
+  if (!days) {
+    return [];
+  }
+  const byLabel = new Map<string, BudgetCategory>();
+  for (const [, day] of sortedDays(days)) {
+    for (const stop of stopsOfDay(day)) {
+      if (typeof stop.price !== "number" || stop.price <= 0) {
+        continue;
+      }
+      const label = STOP_KIND_LABELS[stop.kind] ?? "Other";
+      const row = byLabel.get(label) ?? { label, total: 0, count: 0 };
+      row.total += stop.price;
+      row.count += 1;
+      byLabel.set(label, row);
+    }
+  }
+  return [...byLabel.values()].sort(
+    (a, b) => b.total - a.total || a.label.localeCompare(b.label),
+  );
 }
 
 export function stopsOfDay(day: DayJson): Stop[] {
