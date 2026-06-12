@@ -6,26 +6,17 @@ import { RealtimeReadyContext } from "@/components/trip-realtime-provider";
 import { useTripState } from "@/components/use-trip-state";
 import {
   sortedDays,
+  STOP_KIND_ICONS,
   stopsOfDay,
   type DayJson,
   type Stop,
-  type StopKind,
 } from "@/lib/trip-state";
-
-const KIND_ICONS: Record<StopKind, string> = {
-  flight: "✈️",
-  hotel: "🛏️",
-  activity: "🎟️",
-  food: "🍽️",
-  transport: "🚆",
-  sight: "📍",
-};
 
 function StopRow({ stop }: { stop: Stop }) {
   return (
     <li className="flex items-start gap-2 rounded-lg border border-zinc-100 bg-zinc-50 px-3 py-2 text-sm dark:border-zinc-800 dark:bg-zinc-800/50">
       <span aria-hidden className="mt-0.5">
-        {KIND_ICONS[stop.kind] ?? "•"}
+        {STOP_KIND_ICONS[stop.kind] ?? "•"}
       </span>
       <span className="min-w-0 flex-1">
         <span className="flex items-baseline justify-between gap-2">

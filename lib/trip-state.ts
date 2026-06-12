@@ -29,7 +29,18 @@ export interface Stop {
   location?: string;
   price?: number;
   notes?: string;
+  lat?: number;
+  lng?: number;
 }
+
+export const STOP_KIND_ICONS: Record<StopKind, string> = {
+  flight: "✈️",
+  hotel: "🛏️",
+  activity: "🎟️",
+  food: "🍽️",
+  transport: "🚆",
+  sight: "📍",
+};
 
 export interface Destination {
   id: string;
@@ -73,4 +84,33 @@ export function sortedDays(
   return Object.entries(days).sort(
     ([, a], [, b]) => (a.index ?? 0) - (b.index ?? 0),
   );
+}
+
+// A stop with map coordinates, placed in overall itinerary order (day order,
+// then time order within the day). `order` is 1-based across the whole trip.
+export interface PlacedStop {
+  stop: Stop;
+  dayId: string;
+  dayIndex: number;
+  dayTitle?: string;
+  order: number;
+}
+
+export function placedStops(days: Record<string, DayJson>): PlacedStop[] {
+  const placed: PlacedStop[] = [];
+  for (const [dayId, day] of sortedDays(days)) {
+    for (const stop of stopsOfDay(day)) {
+      if (typeof stop.lat !== "number" || typeof stop.lng !== "number") {
+        continue;
+      }
+      placed.push({
+        stop,
+        dayId,
+        dayIndex: day.index ?? 0,
+        dayTitle: day.title != null ? String(day.title) : undefined,
+        order: placed.length + 1,
+      });
+    }
+  }
+  return placed;
 }

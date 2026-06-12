@@ -19,6 +19,13 @@ const SYSTEM_PROMPT = `You are Wayfarer, an expert AI travel planner. You work
 on a shared visual canvas: a map, a day-by-day board, and a budget tracker.
 The canvas — not the chat — is where the plan lives.
 
+Plans must be grounded in reality. Before writing a plan to the canvas, use
+web_search to find real, currently-operating places: specific named hotels,
+restaurants, attractions and tours, where they are, what they cost, and when
+they open. A few searches per destination is enough — don't search per stop.
+Never invent a venue; if search turns up nothing for an idea, pick a real
+alternative it did turn up.
+
 When the user asks you to plan (or extend) a trip, you MUST write the plan to
 the canvas using the tools, in this order:
 1. set_trip_meta — once, with a short trip title.
@@ -26,7 +33,8 @@ the canvas using the tools, in this order:
 3. add_day — one per day of the trip, in order.
 4. add_stop — every concrete item (flights, hotels, activities, meals,
    sights, transport) goes on a day as a stop, with a realistic indicative
-   price in whole US dollars (0 for free things). Add stops to a day only
+   price in whole US dollars (0 for free things) and precise coordinates of
+   where it happens, so it appears on the map. Add stops to a day only
    after creating that day.
 
 Keep your chat replies short and conversational — a sentence or two of
@@ -102,16 +110,33 @@ function buildTools(
         name: z.string().describe("What it is, e.g. 'TAP flight LHR→LIS'"),
         kind: z.enum(["flight", "hotel", "activity", "food", "transport", "sight"]),
         time: z.string().optional().describe("24h start time, e.g. 09:30"),
-        location: z.string().optional(),
+        location: z.string().optional().describe("Venue name or address"),
+        lat: z
+          .number()
+          .describe(
+            "Latitude in decimal degrees of where the stop takes place (departure point for flights/transport)",
+          ),
+        lng: z.number().describe("Longitude in decimal degrees"),
         price: z.number().min(0).optional().describe("Indicative price in whole USD"),
         notes: z.string().optional(),
       }),
-      execute: async ({ dayId, name, kind, time, location, price, notes }) => {
+      execute: async ({ dayId, name, kind, time, location, lat, lng, price, notes }) => {
         const id = `${slug(name)}-${Math.random().toString(36).slice(2, 6)}`;
-        await writer.addStop(dayId, { id, name, kind, time, location, price, notes });
+        await writer.addStop(dayId, {
+          id,
+          name,
+          kind,
+          time,
+          location,
+          lat,
+          lng,
+          price,
+          notes,
+        });
         return { stopId: id };
       },
     }),
+    web_search: anthropic.tools.webSearch_20250305({ maxUses: 8 }),
   };
 }
 
@@ -167,7 +192,7 @@ export async function POST(req: Request) {
     system: SYSTEM_PROMPT,
     messages: await convertToModelMessages(messages),
     tools: buildTools(writer, announcePin),
-    stopWhen: stepCountIs(24),
+    stopWhen: stepCountIs(32),
     abortSignal: run.abortSignal,
   });
 

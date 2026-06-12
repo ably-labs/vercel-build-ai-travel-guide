@@ -47,6 +47,10 @@ function ToolActivity({ part }: { part: ToolPart }) {
         return input.name
           ? `Adding ${String(input.name)}`
           : "Adding a stop…";
+      case "web_search":
+        return input.query
+          ? `Searching: ${String(input.query)}`
+          : "Searching the web…";
       default:
         return toolName;
     }

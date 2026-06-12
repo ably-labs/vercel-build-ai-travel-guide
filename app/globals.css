@@ -71,6 +71,83 @@ body {
   animation: wayfarer-pin-drop 0.5s cubic-bezier(0.2, 0.8, 0.3, 1.2) both;
 }
 
+/* Numbered itinerary-stop badges (MapLibre marker contents). */
+.wayfarer-stop {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 9999px;
+  border: 2px solid #ffffff;
+  box-shadow: 0 1px 4px rgb(0 0 0 / 0.4);
+  font-size: 11px;
+  font-weight: 700;
+  color: #ffffff;
+  cursor: pointer;
+}
+
+@keyframes wayfarer-stop-pop {
+  0% {
+    transform: scale(0);
+    opacity: 0;
+  }
+  70% {
+    transform: scale(1.2);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+.wayfarer-stop-pop {
+  animation: wayfarer-stop-pop 0.4s cubic-bezier(0.2, 0.8, 0.3, 1.2) both;
+}
+
+/* Stop detail cards (MapLibre popup contents). */
+.wayfarer-popup .maplibregl-popup-content {
+  border-radius: 10px;
+  padding: 10px 12px;
+  box-shadow: 0 4px 16px rgb(0 0 0 / 0.18);
+}
+
+.wayfarer-card {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-family: var(--font-geist-sans, Arial, sans-serif);
+  color: #18181b;
+}
+
+.wayfarer-card-title {
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.wayfarer-card-day {
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.wayfarer-card-row {
+  display: flex;
+  gap: 6px;
+  font-size: 12px;
+  color: #3f3f46;
+}
+
+.wayfarer-card-label {
+  flex-shrink: 0;
+  width: 40px;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #a1a1aa;
+  line-height: 1.6;
+}
+
 @keyframes wayfarer-budget-pop {
   0% {
     transform: scale(1.18);
