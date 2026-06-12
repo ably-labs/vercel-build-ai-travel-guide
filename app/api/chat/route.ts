@@ -37,6 +37,16 @@ the canvas using the tools, in this order:
    where it happens, so it appears on the map. Add stops to a day only
    after creating that day.
 
+When the user adjusts the plan's timeline — retiming a stop, moving things
+between days, shifting the whole schedule, swapping or dropping items — you
+MUST revise the existing canvas in place rather than adding duplicates:
+1. get_schedule — read the current board to find the real dayIds and stopIds.
+2. update_stop / move_stop / remove_stop — retime, reorder across days, or
+   drop the affected stops. update_day re-titles or re-dates a day.
+The board everyone is looking at updates live with each call, so make the
+edits directly; never ask the user to refresh, and never re-add stops that
+already exist.
+
 Keep your chat replies short and conversational — a sentence or two of
 rationale and any assumptions. Never repeat the full itinerary in prose; it's
 already on the canvas. Make sensible assumptions rather than asking more than
@@ -134,6 +144,103 @@ function buildTools(
           notes,
         });
         return { stopId: id };
+      },
+    }),
+    get_schedule: tool({
+      description:
+        "Read the current day-by-day schedule from the canvas, including every stop's stopId, time, day and price. Call this before revising an existing plan so updates target real ids.",
+      inputSchema: z.object({}),
+      execute: async () => {
+        const days = await writer.getSchedule();
+        return { days };
+      },
+    }),
+    update_stop: tool({
+      description:
+        "Revise an existing stop in place — change its time, name, price, location or notes. The shared day board updates live. Only provide the fields that change.",
+      inputSchema: z.object({
+        dayId: z
+          .string()
+          .regex(/^day-\d+$/)
+          .describe("The day the stop is currently on"),
+        stopId: z.string().describe("The stopId from add_stop or get_schedule"),
+        name: z.string().optional(),
+        kind: z
+          .enum(["flight", "hotel", "activity", "food", "transport", "sight"])
+          .optional(),
+        time: z.string().optional().describe("New 24h start time, e.g. 14:00"),
+        location: z.string().optional(),
+        lat: z.number().optional(),
+        lng: z.number().optional(),
+        price: z
+          .number()
+          .min(0)
+          .optional()
+          .describe("New price in whole USD; the budget adjusts by the difference"),
+        notes: z.string().optional(),
+      }),
+      execute: async ({ dayId, stopId, ...changes }) => {
+        const updated = await writer.updateStop(dayId, stopId, changes);
+        if (!updated) {
+          return {
+            error: `No stop '${stopId}' on ${dayId}. Call get_schedule to see current ids.`,
+          };
+        }
+        return { ok: true, stop: updated };
+      },
+    }),
+    move_stop: tool({
+      description:
+        "Move an existing stop to a different day (optionally retiming it in the same call). Atomic: the board never shows it twice. The target day must already exist.",
+      inputSchema: z.object({
+        fromDayId: z.string().regex(/^day-\d+$/),
+        toDayId: z.string().regex(/^day-\d+$/),
+        stopId: z.string().describe("The stopId from add_stop or get_schedule"),
+        time: z
+          .string()
+          .optional()
+          .describe("New 24h start time on the target day"),
+      }),
+      execute: async ({ fromDayId, toDayId, stopId, time }) => {
+        const moved = await writer.moveStop(fromDayId, toDayId, stopId, {
+          time,
+        });
+        if (!moved) {
+          return {
+            error: `No stop '${stopId}' on ${fromDayId}. Call get_schedule to see current ids.`,
+          };
+        }
+        return { ok: true, stop: moved };
+      },
+    }),
+    remove_stop: tool({
+      description:
+        "Remove a stop from the schedule. Its price is refunded from the trip budget.",
+      inputSchema: z.object({
+        dayId: z.string().regex(/^day-\d+$/),
+        stopId: z.string().describe("The stopId from add_stop or get_schedule"),
+      }),
+      execute: async ({ dayId, stopId }) => {
+        const removed = await writer.removeStop(dayId, stopId);
+        if (!removed) {
+          return {
+            error: `No stop '${stopId}' on ${dayId}. Call get_schedule to see current ids.`,
+          };
+        }
+        return { ok: true, removed: removed.name };
+      },
+    }),
+    update_day: tool({
+      description:
+        "Re-title or re-date an existing day on the board, e.g. when the trip dates shift.",
+      inputSchema: z.object({
+        dayId: z.string().regex(/^day-\d+$/),
+        title: z.string().optional(),
+        date: z.string().optional().describe("New ISO date, e.g. 2026-07-19"),
+      }),
+      execute: async ({ dayId, title, date }) => {
+        await writer.updateDay(dayId, { title, date });
+        return { ok: true };
       },
     }),
     web_search: anthropic.tools.webSearch_20250305({ maxUses: 8 }),
