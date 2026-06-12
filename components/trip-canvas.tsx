@@ -1,15 +1,18 @@
 "use client";
 
+import { ChatPanel } from "@/components/chat-panel";
 import { ConnectionBadge } from "@/components/connection-badge";
 
 function Panel({
   title,
   hint,
   className = "",
+  children,
 }: {
   title: string;
-  hint: string;
+  hint?: string;
   className?: string;
+  children?: React.ReactNode;
 }) {
   return (
     <section
@@ -18,9 +21,11 @@ function Panel({
       <header className="border-b border-zinc-100 px-4 py-2.5 text-sm font-semibold text-zinc-700 dark:border-zinc-800 dark:text-zinc-200">
         {title}
       </header>
-      <div className="flex flex-1 items-center justify-center p-4 text-sm text-zinc-400 dark:text-zinc-500">
-        {hint}
-      </div>
+      {children ?? (
+        <div className="flex flex-1 items-center justify-center p-4 text-sm text-zinc-400 dark:text-zinc-500">
+          {hint}
+        </div>
+      )}
     </section>
   );
 }
@@ -52,11 +57,9 @@ export function TripCanvas({ tripId }: { tripId: string }) {
           hint="Day-by-day itinerary cards will appear here"
           className="min-h-48 lg:row-span-2"
         />
-        <Panel
-          title="Chat"
-          hint="Direct the AI from here"
-          className="min-h-48 lg:row-span-2"
-        />
+        <Panel title="Chat" className="min-h-96 lg:row-span-2">
+          <ChatPanel tripId={tripId} />
+        </Panel>
         <Panel
           title="Budget"
           hint="Running trip total will appear here"

@@ -9,7 +9,11 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "@ably/ai-transport": "^0.2.0",
+    "@ai-sdk/anthropic": "^3.0.83",
+    "@ai-sdk/react": "^3.0.204",
     "ably": "^2.22.1",
+    "ai": "^6.0.202",
     "next": "16.2.9",
     "react": "19.2.4",
     "react-dom": "19.2.4"
