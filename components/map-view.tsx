@@ -164,6 +164,12 @@ function routeFeatures(placed: PlacedStop[]): FeatureCollection {
 // Everything durable renders from LiveObjects state (so reload restores it);
 // the trip's pins Pub/Sub channel carries the ephemeral placement events that
 // drop destination pins in with an animation the moment the AI adds them.
+//
+// The map's center/zoom live in the MapLibre instance, which stays mounted
+// while the surrounding panel animates between its grid cell and a
+// full-viewport overlay (see MapPanel), so the view is preserved across the
+// expand / collapse for free. A ResizeObserver keeps the map's internal
+// viewport in lockstep with its container as that box animates.
 export function MapView({ tripId }: { tripId: string }) {
   const ably = useAbly();
   const state = useTripState(tripId);
@@ -222,9 +228,21 @@ export function MapView({ tripId }: { tripId: string }) {
       });
     });
     mapRef.current = map;
+
+    // Keep the map's internal size in sync with its container. The expand /
+    // collapse animation changes the container's box over ~300ms; without
+    // this, MapLibre keeps its old viewport size and renders stretched tiles
+    // and gray gaps until something else triggers a resize. A ResizeObserver
+    // fires on every intermediate frame of the transition, so the map grows
+    // and shrinks smoothly in step with its box. It also covers the responsive
+    // layout reflowing the grid (AIT-943).
+    const resizeObserver = new ResizeObserver(() => map.resize());
+    resizeObserver.observe(containerRef.current);
+
     const markers = markersRef.current;
     const stopMarkers = stopMarkersRef.current;
     return () => {
+      resizeObserver.disconnect();
       markers.forEach((marker) => marker.remove());
       markers.clear();
       stopMarkers.forEach(({ marker }) => marker.remove());
