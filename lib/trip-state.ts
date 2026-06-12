@@ -7,6 +7,7 @@
 //   ├── days (map)      key day-{n} → day map
 //   │     └── day map   { title, date?, index, stop:{stopId} → JSON Stop... }
 //   ├── destinations    (map) key id → JSON Destination
+//   ├── landmarks       (map) key id → JSON SuggestedLandmark
 //   └── budget          (counter) running total in whole USD
 //
 // Stops are JSON leaf values keyed `stop:{id}` inside their day's map, so
@@ -67,6 +68,27 @@ export interface Destination {
   lng: number;
 }
 
+// A point-of-interest the AI suggests near the trip's destinations. Unlike a
+// Stop, it isn't scheduled onto a day or priced — it's an optional "you could
+// also see this" marker. It surfaces on the map only once the user zooms in
+// far enough to be looking at a city rather than the whole world, so the
+// world view stays uncluttered (see LANDMARK_MIN_ZOOM).
+export interface SuggestedLandmark {
+  id: string;
+  name: string;
+  lat: number;
+  lng: number;
+  // Short reason the place is worth seeing, shown on the pin's tooltip.
+  blurb?: string;
+}
+
+// MapLibre zoom level (0 = whole world, ~22 = building) at or above which
+// suggested-landmark pins appear. Below it the map is showing countries or
+// continents, where individual landmarks would be noise; from roughly
+// city-scale up they become useful. Destinations and itinerary stops are
+// always shown regardless — only the optional suggestions are zoom-gated.
+export const LANDMARK_MIN_ZOOM = 9;
+
 export interface TripMeta {
   title?: string;
   summary?: string;
@@ -85,6 +107,7 @@ export interface TripStateJson {
   meta?: TripMeta;
   days?: Record<string, DayJson>;
   destinations?: Record<string, Destination>;
+  landmarks?: Record<string, SuggestedLandmark>;
   budget?: number;
 }
 

@@ -2,7 +2,13 @@ import Ably from "ably";
 import { LiveObjects, type RestObjectOperation } from "ably/liveobjects";
 
 import { stateChannelName } from "@/lib/channels";
-import type { DayJson, Destination, Stop, TripMeta } from "@/lib/trip-state";
+import type {
+  DayJson,
+  Destination,
+  Stop,
+  SuggestedLandmark,
+  TripMeta,
+} from "@/lib/trip-state";
 
 // REST compact reads return JSON-typed map values as their JSON-encoded
 // string representation (unlike the realtime client's compactJson, which
@@ -82,6 +88,12 @@ export class TripStateWriter {
     if (!current || current.destinations === undefined) {
       ops.push({
         path: "destinations",
+        mapCreate: { semantics: "lww", entries: {} },
+      });
+    }
+    if (!current || current.landmarks === undefined) {
+      ops.push({
+        path: "landmarks",
         mapCreate: { semantics: "lww", entries: {} },
       });
     }
@@ -398,6 +410,20 @@ export class TripStateWriter {
       mapSet: {
         key: destination.id,
         value: { json: { ...destination } },
+      },
+    });
+  }
+
+  // Add (or replace, by id) a suggested landmark. Keyed by id so re-suggesting
+  // the same place is idempotent — the map pin updates in place rather than
+  // duplicating. These are optional points of interest shown on the map when
+  // zoomed in, not scheduled stops, so there's no budget to reconcile.
+  async addLandmark(landmark: SuggestedLandmark): Promise<void> {
+    await this.channel.object.publish({
+      path: "landmarks",
+      mapSet: {
+        key: landmark.id,
+        value: { json: { ...landmark } },
       },
     });
   }
