@@ -37,6 +37,14 @@ the canvas using the tools, in this order:
    where it happens, so it appears on the map. Add stops to a day only
    after creating that day.
 
+Alongside the scheduled plan, use suggest_landmark to drop a handful of
+notable nearby points of interest (well-known sights, viewpoints, museums)
+that aren't on the itinerary — optional ideas the traveller might add. These
+are not stops: they don't count against the itinerary cap, aren't placed on a
+day, and don't affect the budget. They surface as pins on the map when the
+user zooms in on a destination. A few real, highly-rated ones per destination
+is plenty; don't suggest somewhere already on the itinerary as a stop.
+
 Keep the plan tight: a trip may contain at most ${MAX_ITINERARY_ITEMS}
 itinerary items (stops) in total — this is a hard ceiling, not a target, so
 shorter trips should have fewer. Do not over-stuff the schedule. When you
@@ -104,6 +112,24 @@ function buildTools(
         await writer.addDestination(destination);
         announcePin(destination);
         return { destinationId: destination.id };
+      },
+    }),
+    suggest_landmark: tool({
+      description:
+        "Suggest a notable landmark or point of interest near the trip's destinations. These appear as pins on the map when the user zooms in, as optional 'you could also see this' ideas — they are NOT scheduled onto a day and don't affect the budget. Use real, currently-open places with accurate coordinates. Re-suggesting the same landmark (same name) replaces it rather than duplicating.",
+      inputSchema: z.object({
+        name: z.string().describe("Landmark name, e.g. 'Belém Tower'"),
+        lat: z.number().describe("Latitude in decimal degrees"),
+        lng: z.number().describe("Longitude in decimal degrees"),
+        blurb: z
+          .string()
+          .optional()
+          .describe("One short line on why it's worth seeing"),
+      }),
+      execute: async ({ name, lat, lng, blurb }) => {
+        const landmark = { id: slug(name), name, lat, lng, blurb };
+        await writer.addLandmark(landmark);
+        return { landmarkId: landmark.id };
       },
     }),
     add_day: tool({

@@ -11,10 +11,12 @@ import { useSelectedStop } from "@/components/selected-stop";
 import { useTripState } from "@/components/use-trip-state";
 import { pinsChannelName } from "@/lib/channels";
 import {
+  LANDMARK_MIN_ZOOM,
   placedStops,
   STOP_KIND_ICONS,
   type Destination,
   type PlacedStop,
+  type SuggestedLandmark,
 } from "@/lib/trip-state";
 
 const MAP_STYLE: maplibregl.StyleSpecification = {
@@ -60,6 +62,36 @@ function isDestination(data: unknown): data is Destination {
     typeof d.lat === "number" &&
     typeof d.lng === "number"
   );
+}
+
+function isLandmark(data: unknown): data is SuggestedLandmark {
+  const l = data as SuggestedLandmark;
+  return (
+    typeof l === "object" &&
+    l !== null &&
+    typeof l.id === "string" &&
+    typeof l.name === "string" &&
+    typeof l.lat === "number" &&
+    typeof l.lng === "number"
+  );
+}
+
+// A suggested-landmark pin: a small teardrop marker with the place name. It's
+// deliberately lighter than a destination pin — these are optional ideas, not
+// the trip's anchor cities. Shown only when the map is zoomed in (see
+// LANDMARK_MIN_ZOOM); the marker root toggles visibility from the zoom handler.
+function landmarkElement(landmark: SuggestedLandmark): HTMLElement {
+  const root = document.createElement("div");
+  root.className = "wayfarer-landmark";
+  const marker = document.createElement("span");
+  marker.className = "wayfarer-landmark-pin";
+  const label = document.createElement("span");
+  label.className = "wayfarer-landmark-label";
+  label.textContent = landmark.name;
+  root.append(marker, label);
+  if (landmark.blurb) root.title = `${landmark.name} — ${landmark.blurb}`;
+  else root.title = landmark.name;
+  return root;
 }
 
 // MapLibre positions markers by setting transform on the root element, so the
@@ -181,6 +213,12 @@ export function MapView({ tripId }: { tripId: string }) {
   const stopMarkersRef = useRef(
     new Map<string, { marker: maplibregl.Marker; json: string }>(),
   );
+  // Suggested-landmark markers, kept hidden until the map is zoomed in past
+  // LANDMARK_MIN_ZOOM (see the zoom effect). Their elements stay mounted; only
+  // their `hidden` flag toggles, so revealing them on zoom is instant.
+  const landmarkMarkersRef = useRef(
+    new Map<string, { marker: maplibregl.Marker; json: string }>(),
+  );
   // The route source can only be created once the style has loaded; state
   // updates that arrive earlier park their data here.
   const routeDataRef = useRef<FeatureCollection | null>(null);
@@ -231,6 +269,21 @@ export function MapView({ tripId }: { tripId: string }) {
     });
     mapRef.current = map;
 
+    // Reveal or hide the suggested-landmark pins as the user crosses the zoom
+    // threshold. Below it the map shows whole countries, where landmarks would
+    // be clutter; from city-scale up they help the traveller spot what's
+    // nearby. Toggling the marker root's `hidden` flag (rather than
+    // adding/removing markers) keeps the reveal instant and lets the CSS fade
+    // them in. Fires on every zoom frame, so the threshold crossing is caught
+    // whichever direction the user zooms.
+    const syncLandmarkVisibility = () => {
+      const visible = map.getZoom() >= LANDMARK_MIN_ZOOM;
+      landmarkMarkersRef.current.forEach(({ marker }) => {
+        marker.getElement().classList.toggle("wayfarer-landmark-shown", visible);
+      });
+    };
+    map.on("zoom", syncLandmarkVisibility);
+
     // Keep the map's internal size in sync with its container. The expand /
     // collapse animation changes the container's box over ~300ms; without
     // this, MapLibre keeps its old viewport size and renders stretched tiles
@@ -243,12 +296,16 @@ export function MapView({ tripId }: { tripId: string }) {
 
     const markers = markersRef.current;
     const stopMarkers = stopMarkersRef.current;
+    const landmarkMarkers = landmarkMarkersRef.current;
     return () => {
+      map.off("zoom", syncLandmarkVisibility);
       resizeObserver.disconnect();
       markers.forEach((marker) => marker.remove());
       markers.clear();
       stopMarkers.forEach(({ marker }) => marker.remove());
       stopMarkers.clear();
+      landmarkMarkers.forEach(({ marker }) => marker.remove());
+      landmarkMarkers.clear();
       restoredRef.current = false;
       routeDataRef.current = null;
       mapRef.current = null;
@@ -375,6 +432,40 @@ export function MapView({ tripId }: { tripId: string }) {
     // selectNonce makes a repeat select re-trigger; state is included so a
     // select that lands just before the marker exists re-runs once it does.
   }, [selectedStopId, selectNonce, state]);
+
+  // Sync suggested-landmark markers with the durable landmark set in
+  // LiveObjects. New or changed pins are (re)created with the visibility that
+  // matches the map's current zoom, so a landmark suggested while already
+  // zoomed in shows immediately, and one suggested at the world view stays
+  // hidden until the user zooms to it. The zoom handler above keeps the whole
+  // set in step thereafter.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!state || !map) return;
+    const landmarks = state.landmarks ?? {};
+    const landmarkMarkers = landmarkMarkersRef.current;
+    const shown = map.getZoom() >= LANDMARK_MIN_ZOOM;
+
+    landmarkMarkers.forEach(({ marker }, id) => {
+      if (!landmarks[id]) {
+        marker.remove();
+        landmarkMarkers.delete(id);
+      }
+    });
+    Object.values(landmarks).forEach((landmark) => {
+      if (!isLandmark(landmark)) return;
+      const json = JSON.stringify(landmark);
+      const existing = landmarkMarkers.get(landmark.id);
+      if (existing?.json === json) return;
+      existing?.marker.remove();
+      const element = landmarkElement(landmark);
+      if (shown) element.classList.add("wayfarer-landmark-shown");
+      const marker = new maplibregl.Marker({ element })
+        .setLngLat([landmark.lng, landmark.lat])
+        .addTo(map);
+      landmarkMarkers.set(landmark.id, { marker, json });
+    });
+  }, [state]);
 
   // Drop pins the instant the AI announces them, ahead of (and deduped
   // against) the LiveObjects state sync.
