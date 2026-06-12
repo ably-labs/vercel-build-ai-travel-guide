@@ -142,18 +142,25 @@ function buildTools(
         notes: z.string().optional(),
       }),
       execute: async ({ dayId, name, kind, time, location, lat, lng, price, notes }) => {
+        // Deterministic id from the day + name, so re-adding the same item to
+        // the same day replaces it rather than creating a duplicate card (and
+        // double-counting its price). Re-planning that re-issues add_stop for
+        // an existing item is therefore idempotent.
+        const id = `${dayId}-${slug(name)}`;
         // Hard cap: a plan never holds more than MAX_ITINERARY_ITEMS stops.
         // The model is told to add the most popular stops first, so the items
         // retained at the cap are the highest-signal ones, not an arbitrary
-        // slice. Refuse the call once full rather than truncating silently.
+        // slice. Refuse the call once full rather than truncating silently —
+        // but allow replacing a stop that already exists (same id), since that
+        // doesn't grow the plan.
         const existing = await writer.countStops();
-        if (existing >= MAX_ITINERARY_ITEMS) {
+        const isReplacement = await writer.hasStop(dayId, id);
+        if (existing >= MAX_ITINERARY_ITEMS && !isReplacement) {
           return {
             error: `Itinerary is full: a plan may contain at most ${MAX_ITINERARY_ITEMS} stops, and this trip already has ${existing}. Do not add more stops. If a less important stop should make way for this one, remove it first with remove_stop, then re-add.`,
           };
         }
-        const id = `${slug(name)}-${Math.random().toString(36).slice(2, 6)}`;
-        await writer.addStop(dayId, {
+        const stopId = await writer.addStop(dayId, {
           id,
           name,
           kind,
@@ -164,7 +171,7 @@ function buildTools(
           price,
           notes,
         });
-        return { stopId: id };
+        return { stopId };
       },
     }),
     get_schedule: tool({
