@@ -11,14 +11,11 @@ Load `jira` tools (`searchAblyTools` category `jira`) and ensure `gh` is authent
 
 ## Phase 1 — Reconcile status end-to-end
 
-Pull the epic's tickets in flight and bring Jira in line with what actually happened on GitHub. Search `jiraSearchIssues`: `project = AIT AND parent = AIT-936 AND status in ("In Review","In Progress")`, fields `["summary","status","assignee"]`.
+Bring Jira in line with what happened on GitHub — crucially, this is where a **human merging a PR moves the ticket to Done** and unblocks its dependents for this wave's Phases 2–3.
 
-For each **In Review** ticket, find its PR (the PR title/body carries the key; `gh pr list --search "<key>" --state all --json number,state,mergedAt,headRefName`):
-- **PR merged** → transition the ticket to **Done**: `jiraTransitionIssue { "issue_key": "<key>", "transition": "Done", "resolution": "Fixed", "comment": "Merged: <url>" }`. Then clean up: `git worktree prune` and delete the merged local branch if present. Moving it to Done is what unblocks its dependents in Phase 2/3.
-- **PR closed without merging** → the change was rejected; transition back to **To Do**, clear the assignee (`jiraCreateUpdateIssue { "issue_key":"<key>", "assignee":"unassigned" }`), and comment why so it re-enters the pool.
-- **PR still open** → leave it; Phase 4 keeps it mergeable.
+Invoke the **`sync-ticket-status`** skill. It handles every In Review ticket: PR merged → **Done** (+ branch cleanup); PR closed unmerged → back to **To Do** (unassigned); PR still open → left for Phase 4; no PR found → bounced back to To Do.
 
-For each **In Progress** ticket with **no branch and no open PR** and no active worker (a worker that died mid-run): if it's been stuck with no progress, transition back to To Do and unassign so it can be re-picked. Be conservative — don't reclaim one a worker is actively building this wave.
+Then handle the one case `sync-ticket-status` doesn't — dead workers: for each **In Progress** ticket with no branch and no open PR that isn't being actively built by a worker this wave, transition it back to To Do and unassign so it can be re-picked. Be conservative; don't reclaim one a worker is mid-flight on.
 
 ## Phase 2 — Refresh the dependency graph
 
@@ -30,7 +27,7 @@ Follow the inference + idempotent `jiraCreateIssueLink` procedure described in `
 
 Compute the **claimable set** — every To Do ticket that passes all of `work-next-ticket` step 3's guards: unassigned, no remote/local branch (`git ls-remote --heads origin "<key>-*"`), no open PR, and **all blockers Done**. Independent tickets are parallel-safe; blocked ones are intentionally excluded and wait for a future wave.
 
-- If the claimable set is **empty**: report why (backlog drained, or everything left is waiting on a human to merge a blocker's PR) and **stop the loop** — there is no productive work until a merge happens.
+- If the claimable set is **empty**, do **not** necessarily stop — check what's in flight (see End of wave). If tickets are still In Review awaiting a human merge, this wave does no dispatch but the loop must keep going so Phase 1 catches those merges. Only when nothing is in flight either is the backlog truly drained.
 - Otherwise dispatch up to **4 workers concurrently** (cap — raise only if the machine can take it). For each chosen ticket, launch a **background `Agent` with `isolation: "worktree"`** so each gets its own isolated checkout and they cannot collide. Send all the wave's agents in a **single message** (multiple `Agent` calls) so they run in parallel. Each agent's prompt:
 
   > You are in a fresh, isolated git worktree. Work Wayfarer ticket `<key>` end to end by invoking the `work-next-ticket` skill with that exact key. It will claim the ticket atomically (skip if already lost), implement via `work-on-issue` + `/goal`, rebase onto `origin/main`, push, open a PR, and move the ticket to In Review. Do not call EnterWorktree — you are already isolated. Report the PR URL, or `lost claim on <key>`, or the blocker if you had to stop.
@@ -41,11 +38,14 @@ Wait for the wave's workers to finish (they run in the background; you're notifi
 
 ## Phase 4 — Keep open PRs mergeable (conflict resolution)
 
-A PR that was fine when opened can go stale once a sibling merges. List open PRs: `gh pr list --state open --json number,headRefName,mergeable,mergeStateStatus`. For each that is `CONFLICTING` or behind `main`:
-
-- Add a worktree on its branch (`git worktree add ../wf-<branch> <branch>`), `git fetch origin`, invoke **`/git-rebase`** (`ably-skills:git-rebase`) to rebase onto `origin/main` resolving conflicts, then `git push --force-with-lease`. Remove the temp worktree afterward (`git worktree remove`).
-- If `/git-rebase` hits a conflict it can't safely resolve, comment on the PR and the ticket flagging that human help is needed, and move on — never force a bad resolution.
+Any PR that was fine when opened goes stale the moment a sibling merges ahead of it. Invoke the **`rebase-stale-prs`** skill: it finds every open AIT PR that is now `BEHIND` / conflicting with `main`, rebases each onto `origin/main` via `/git-rebase`, and force-pushes with `--force-with-lease` — flagging for a human only the conflicts it can't safely resolve. This runs right after Phase 1 has merged-and-Done'd tickets, so the PRs left behind by those merges get refreshed in the same wave.
 
 ## End of wave
 
-Print a concise summary: tickets moved to Done, PRs opened this wave (with URLs), PRs rebased, and what remains blocked and on whom. Then let `/loop` re-invoke for the next wave. The loop naturally stops when Phase 3 finds nothing claimable — i.e. everything is either Done or waiting on a human PR merge.
+Print a concise summary: tickets moved to Done this wave, PRs opened (with URLs), PRs rebased, and what remains blocked and on whom.
+
+Then decide whether to continue:
+- **Keep looping** if anything is still in flight — any ticket In Review (awaiting a human merge) or In Progress, or any open PR. There's no claimable work right now, but the loop must keep running so the next wave's Phase 1 turns merges into Done and unblocks dependents. Pace these idle waves gently (a longer interval is fine — nothing happens until a human acts).
+- **Stop the loop** only when the epic is genuinely drained: no To Do, no In Progress, no In Review, no open PRs. Report "backlog fully drained" and end.
+
+This is the key behaviour: a merge by a human is reflected automatically because the loop is still alive — through `autopilot`, or independently via `/loop /sync-ticket-status`.
