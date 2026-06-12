@@ -13,7 +13,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Wayfarer",
+  title: "Wayfarer — AI Travel Guide",
   description:
     "An AI travel planning canvas — chat directs the AI; the canvas is where it works.",
 };
