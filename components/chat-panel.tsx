@@ -14,25 +14,89 @@ import { RealtimeReadyContext } from "@/components/trip-realtime-provider";
 import { sessionChannelName } from "@/lib/channels";
 import { getVisitorId } from "@/lib/visitor";
 
+interface ToolPart {
+  type: string;
+  toolName?: string;
+  state?: string;
+  input?: Record<string, unknown>;
+}
+
+function toolPartsOf(message: UIMessage): ToolPart[] {
+  return message.parts.filter(
+    (part) => part.type === "dynamic-tool" || part.type.startsWith("tool-"),
+  ) as unknown as ToolPart[];
+}
+
+// Live feedback while the AI works the canvas: each tool call renders as an
+// activity line that appears as soon as the call starts streaming in.
+function ToolActivity({ part }: { part: ToolPart }) {
+  const input = part.input ?? {};
+  const toolName =
+    part.toolName ?? part.type.replace(/^tool-/, "").replace(/^dynamic-/, "");
+  const label = (() => {
+    switch (toolName) {
+      case "set_trip_meta":
+        return input.title ? `Trip: ${String(input.title)}` : "Naming the trip…";
+      case "add_destination":
+        return input.name
+          ? `Pinning ${String(input.name)} on the map`
+          : "Adding a destination…";
+      case "add_day":
+        return input.title ? String(input.title) : "Adding a day…";
+      case "add_stop":
+        return input.name
+          ? `Adding ${String(input.name)}`
+          : "Adding a stop…";
+      default:
+        return toolName;
+    }
+  })();
+  const done =
+    part.state === "output-available" || part.state === "output-error";
+  return (
+    <span className="flex items-center gap-1.5 px-1 text-xs text-zinc-500 dark:text-zinc-400">
+      <span
+        aria-hidden
+        className={done ? "text-emerald-500" : "animate-pulse text-zinc-400"}
+      >
+        {done ? "✓" : "◌"}
+      </span>
+      {label}
+    </span>
+  );
+}
+
 function MessageBubble({ message }: { message: UIMessage }) {
   const isUser = message.role === "user";
   const text = message.parts
     .map((part) => (part.type === "text" ? part.text : ""))
     .join("");
-  if (!text) {
+  const toolParts = isUser ? [] : toolPartsOf(message);
+  if (!text && toolParts.length === 0) {
     return null;
   }
   return (
-    <div className={`flex ${isUser ? "justify-end" : "justify-start"}`}>
-      <div
-        className={`max-w-[85%] whitespace-pre-wrap rounded-2xl px-3 py-2 text-sm ${
-          isUser
-            ? "bg-zinc-900 text-white dark:bg-white dark:text-zinc-900"
-            : "bg-zinc-100 text-zinc-800 dark:bg-zinc-800 dark:text-zinc-100"
-        }`}
-      >
-        {text}
-      </div>
+    <div
+      className={`flex flex-col gap-1 ${isUser ? "items-end" : "items-start"}`}
+    >
+      {toolParts.length > 0 && (
+        <div className="flex flex-col gap-0.5 py-0.5">
+          {toolParts.map((part, i) => (
+            <ToolActivity key={i} part={part} />
+          ))}
+        </div>
+      )}
+      {text && (
+        <div
+          className={`max-w-[85%] whitespace-pre-wrap rounded-2xl px-3 py-2 text-sm ${
+            isUser
+              ? "bg-zinc-900 text-white dark:bg-white dark:text-zinc-900"
+              : "bg-zinc-100 text-zinc-800 dark:bg-zinc-800 dark:text-zinc-100"
+          }`}
+        >
+          {text}
+        </div>
+      )}
     </div>
   );
 }

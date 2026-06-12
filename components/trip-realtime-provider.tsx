@@ -25,10 +25,12 @@ export function TripRealtimeProvider({
   const [client, setClient] = useState<Ably.Realtime | null>(null);
 
   useEffect(() => {
+    // Note: echoMessages must stay enabled — AI Transport anchors a run's
+    // view to the triggering input event, so suppressing the echo of our own
+    // published messages breaks the live conversation view.
     const realtime = new Ably.Realtime({
       authUrl: "/api/ably/token",
       authParams: { clientId: getVisitorId() },
-      echoMessages: false,
       plugins: { LiveObjects },
     });
     // Mount-only external-system connection: state must be set from the
