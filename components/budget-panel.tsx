@@ -36,8 +36,9 @@ function BudgetPanelInner({ tripId }: { tripId: string }) {
   );
 }
 
-// Running trip total, read live from the LiveObjects budget counter (priced
-// stops increment it server-side as the AI writes them).
+// Running trip total, read live from the LiveObjects budget counter. The
+// server reconciles the counter to the sum of the trip's current priced stops
+// on every change, so it always matches the board (no stale accumulation).
 export function BudgetPanel({ tripId }: { tripId: string }) {
   const ready = useContext(RealtimeReadyContext);
   if (!ready) {

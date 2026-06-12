@@ -35,6 +35,24 @@ export interface DaySchedule {
   stops: Stop[];
 }
 
+// Sum the price of every priced stop across the whole trip from the compact
+// `days` view. This is the source of truth for the budget — the counter is
+// only ever reconciled to match it, never accumulated independently.
+function sumStopPrices(
+  days: Record<string, Record<string, unknown>> | undefined,
+): number {
+  if (!days) return 0;
+  let total = 0;
+  for (const day of Object.values(days)) {
+    for (const [key, value] of Object.entries(day)) {
+      if (!key.startsWith("stop:")) continue;
+      const stop = parseJsonLeaf<Stop>(value);
+      if (stop?.price && stop.price > 0) total += stop.price;
+    }
+  }
+  return total;
+}
+
 // Server-side writer for a trip's LiveObjects state. Uses the REST object
 // API (stateless HTTP — right for a serverless route) with path-based,
 // atomic batch operations.
@@ -118,7 +136,27 @@ export class TripStateWriter {
     return total;
   }
 
-  async addStop(dayId: string, stop: Stop): Promise<void> {
+  // Whether a stop with this id already exists on the given day — used to tell
+  // a replacing add_stop (idempotent, same id) from one that grows the plan.
+  async hasStop(dayId: string, stopId: string): Promise<boolean> {
+    const root = (await this.channel.object.get()) as Record<
+      string,
+      unknown
+    > | null;
+    const days = (root?.days ?? {}) as Record<string, Record<string, unknown>>;
+    return days[dayId]?.[`stop:${stopId}`] !== undefined;
+  }
+
+  // Add a stop to a day. The map key is the stop's id, so re-adding a stop
+  // with the same id replaces it rather than duplicating the card. After
+  // writing the stop we reconcile the budget to the sum of the trip's current
+  // priced stops, so the total can never inflate from a re-add or retry — it
+  // always equals what's actually on the board. Returns the stop's final id.
+  async addStop(dayId: string, stop: Stop): Promise<string> {
+    const root = (await this.channel.object.get()) as Record<
+      string,
+      unknown
+    > | null;
     const ops: RestObjectOperation[] = [
       {
         path: `days.${dayId}`,
@@ -128,22 +166,33 @@ export class TripStateWriter {
         },
       },
     ];
-    if (stop.price && stop.price > 0) {
-      ops.push({ path: "budget", counterInc: { number: stop.price } });
-    }
+    // Project the post-write state so the budget reconciles to include the
+    // stop we're about to set (replacing any prior value at the same id).
+    const days = { ...((root?.days ?? {}) as Record<string, Record<string, unknown>>) };
+    days[dayId] = { ...(days[dayId] ?? {}), [`stop:${stop.id}`]: { ...stop } };
+    const budgetOp = this.reconcileBudgetOp({ ...root, days });
+    if (budgetOp) ops.push(budgetOp);
     await this.channel.object.publish(ops);
+    return stop.id;
   }
 
-  // Read a single stop's current value, or null if the day/stop is missing.
-  private async readStop(dayId: string, stopId: string): Promise<Stop | null> {
-    try {
-      const day = (await this.channel.object.get({
-        path: `days.${dayId}`,
-      })) as Record<string, unknown> | null;
-      return parseJsonLeaf<Stop>(day?.[`stop:${stopId}`]);
-    } catch {
-      return null;
-    }
+  // Build a single counterInc op that moves the budget counter to exactly the
+  // sum of the trip's current priced stops, or null if it's already correct.
+  // Because the only counter primitive is increment (there's no set), we read
+  // the live total and the live counter and emit the delta between them. This
+  // makes the budget self-healing: after any change it equals the current
+  // itinerary, never an accumulation of stale or duplicated adds.
+  private reconcileBudgetOp(
+    root: Record<string, unknown> | null,
+  ): RestObjectOperation | null {
+    const days = (root?.days ?? undefined) as
+      | Record<string, Record<string, unknown>>
+      | undefined;
+    const target = sumStopPrices(days);
+    const current = typeof root?.budget === "number" ? root.budget : 0;
+    const delta = target - current;
+    if (delta === 0) return null;
+    return { path: "budget", counterInc: { number: delta } };
   }
 
   // The full itinerary in day order with parsed stops — lets the agent see
@@ -172,14 +221,20 @@ export class TripStateWriter {
   }
 
   // Revise an existing stop in place (retime, reprice, rename...). The board
-  // re-renders live from the LiveObjects update; the budget counter moves by
-  // the price delta so totals stay correct. Returns null if the stop is gone.
+  // re-renders live from the LiveObjects update; the budget counter is
+  // reconciled to the trip's current stop total so it stays correct even after
+  // re-pricing. Returns null if the stop is gone.
   async updateStop(
     dayId: string,
     stopId: string,
     changes: Partial<Omit<Stop, "id">>,
   ): Promise<Stop | null> {
-    const current = await this.readStop(dayId, stopId);
+    const root = (await this.channel.object.get()) as Record<
+      string,
+      unknown
+    > | null;
+    const days = (root?.days ?? {}) as Record<string, Record<string, unknown>>;
+    const current = parseJsonLeaf<Stop>(days[dayId]?.[`stop:${stopId}`]);
     if (!current) return null;
     const updated: Stop = {
       ...current,
@@ -192,10 +247,12 @@ export class TripStateWriter {
         mapSet: { key: `stop:${stopId}`, value: { json: { ...updated } } },
       },
     ];
-    const priceDelta = (updated.price ?? 0) - (current.price ?? 0);
-    if (priceDelta !== 0) {
-      ops.push({ path: "budget", counterInc: { number: priceDelta } });
-    }
+    const nextDays = {
+      ...days,
+      [dayId]: { ...(days[dayId] ?? {}), [`stop:${stopId}`]: { ...updated } },
+    };
+    const budgetOp = this.reconcileBudgetOp({ ...root, days: nextDays });
+    if (budgetOp) ops.push(budgetOp);
     await this.channel.object.publish(ops);
     return updated;
   }
@@ -212,7 +269,12 @@ export class TripStateWriter {
     if (fromDayId === toDayId) {
       return this.updateStop(fromDayId, stopId, changes);
     }
-    const current = await this.readStop(fromDayId, stopId);
+    const root = (await this.channel.object.get()) as Record<
+      string,
+      unknown
+    > | null;
+    const days = (root?.days ?? {}) as Record<string, Record<string, unknown>>;
+    const current = parseJsonLeaf<Stop>(days[fromDayId]?.[`stop:${stopId}`]);
     if (!current) return null;
     const updated: Stop = {
       ...current,
@@ -226,10 +288,15 @@ export class TripStateWriter {
         mapSet: { key: `stop:${stopId}`, value: { json: { ...updated } } },
       },
     ];
-    const priceDelta = (updated.price ?? 0) - (current.price ?? 0);
-    if (priceDelta !== 0) {
-      ops.push({ path: "budget", counterInc: { number: priceDelta } });
-    }
+    const fromDay = { ...(days[fromDayId] ?? {}) };
+    delete fromDay[`stop:${stopId}`];
+    const nextDays = {
+      ...days,
+      [fromDayId]: fromDay,
+      [toDayId]: { ...(days[toDayId] ?? {}), [`stop:${stopId}`]: { ...updated } },
+    };
+    const budgetOp = this.reconcileBudgetOp({ ...root, days: nextDays });
+    if (budgetOp) ops.push(budgetOp);
     await this.channel.object.publish(ops);
     return updated;
   }
@@ -237,14 +304,21 @@ export class TripStateWriter {
   // Remove a stop from the schedule, refunding its price from the budget.
   // Returns the removed stop, or null if it wasn't there.
   async removeStop(dayId: string, stopId: string): Promise<Stop | null> {
-    const current = await this.readStop(dayId, stopId);
+    const root = (await this.channel.object.get()) as Record<
+      string,
+      unknown
+    > | null;
+    const days = (root?.days ?? {}) as Record<string, Record<string, unknown>>;
+    const current = parseJsonLeaf<Stop>(days[dayId]?.[`stop:${stopId}`]);
     if (!current) return null;
     const ops: RestObjectOperation[] = [
       { path: `days.${dayId}`, mapRemove: { key: `stop:${stopId}` } },
     ];
-    if (current.price && current.price > 0) {
-      ops.push({ path: "budget", counterInc: { number: -current.price } });
-    }
+    const nextDay = { ...(days[dayId] ?? {}) };
+    delete nextDay[`stop:${stopId}`];
+    const nextDays = { ...days, [dayId]: nextDay };
+    const budgetOp = this.reconcileBudgetOp({ ...root, days: nextDays });
+    if (budgetOp) ops.push(budgetOp);
     await this.channel.object.publish(ops);
     return current;
   }
