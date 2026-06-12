@@ -7,7 +7,7 @@ import { after } from "next/server";
 import { z } from "zod";
 
 import { pinsChannelName, tripIdFromSessionChannel } from "@/lib/channels";
-import type { Destination } from "@/lib/trip-state";
+import { MAX_ITINERARY_ITEMS, type Destination } from "@/lib/trip-state";
 import { TripStateWriter } from "@/lib/trip-state-server";
 
 export const runtime = "nodejs";
@@ -36,6 +36,17 @@ the canvas using the tools, in this order:
    price in whole US dollars (0 for free things) and precise coordinates of
    where it happens, so it appears on the map. Add stops to a day only
    after creating that day.
+
+Keep the plan tight: a trip may contain at most ${MAX_ITINERARY_ITEMS}
+itinerary items (stops) in total — this is a hard ceiling, not a target, so
+shorter trips should have fewer. Do not over-stuff the schedule. When you
+have more candidate stops than the cap allows, keep only the most popular,
+highly-recommended, highest-signal ones (judged by your web_search grounding —
+ratings, prominence, how often a place is recommended) and drop the niche or
+filler ones; never pad just to reach ten. Add stops most-popular-first, and
+spread the kept stops sensibly across the trip's days rather than cramming
+them into day one. The add_stop tool enforces the ceiling and will refuse
+once the plan is full, so choose what makes the cut before you add it.
 
 When the user adjusts the plan's timeline — retiming a stop, moving things
 between days, shifting the whole schedule, swapping or dropping items — you
@@ -131,6 +142,16 @@ function buildTools(
         notes: z.string().optional(),
       }),
       execute: async ({ dayId, name, kind, time, location, lat, lng, price, notes }) => {
+        // Hard cap: a plan never holds more than MAX_ITINERARY_ITEMS stops.
+        // The model is told to add the most popular stops first, so the items
+        // retained at the cap are the highest-signal ones, not an arbitrary
+        // slice. Refuse the call once full rather than truncating silently.
+        const existing = await writer.countStops();
+        if (existing >= MAX_ITINERARY_ITEMS) {
+          return {
+            error: `Itinerary is full: a plan may contain at most ${MAX_ITINERARY_ITEMS} stops, and this trip already has ${existing}. Do not add more stops. If a less important stop should make way for this one, remove it first with remove_stop, then re-add.`,
+          };
+        }
         const id = `${slug(name)}-${Math.random().toString(36).slice(2, 6)}`;
         await writer.addStop(dayId, {
           id,

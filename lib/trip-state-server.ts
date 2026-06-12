@@ -101,6 +101,23 @@ export class TripStateWriter {
     });
   }
 
+  // Count itinerary items (stops) across the whole plan, so the agent can
+  // enforce the ≤10 cap before adding another.
+  async countStops(): Promise<number> {
+    const root = (await this.channel.object.get()) as Record<
+      string,
+      unknown
+    > | null;
+    const days = (root?.days ?? {}) as Record<string, DayJson>;
+    let total = 0;
+    for (const day of Object.values(days)) {
+      for (const key of Object.keys(day)) {
+        if (key.startsWith("stop:")) total += 1;
+      }
+    }
+    return total;
+  }
+
   async addStop(dayId: string, stop: Stop): Promise<void> {
     const ops: RestObjectOperation[] = [
       {

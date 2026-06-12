@@ -13,6 +13,11 @@
 // adding a stop is a single conflict-free mapSet and the board re-renders
 // per-stop as the AI writes.
 
+// Upper bound on the number of itinerary items (stops) in a single plan.
+// Over-stuffed itineraries read as noise; we keep the most popular stops and
+// cap the total. This is a ceiling, not a target — short trips have fewer.
+export const MAX_ITINERARY_ITEMS = 10;
+
 export type StopKind =
   | "flight"
   | "hotel"
