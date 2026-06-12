@@ -103,7 +103,7 @@ function MessageBubble({ message }: { message: UIMessage }) {
           className={`max-w-[85%] whitespace-pre-wrap rounded-2xl px-3 py-2 text-sm ${
             isUser
               ? "bg-zinc-900 text-white dark:bg-white dark:text-zinc-900"
-              : "bg-zinc-100 text-zinc-800 dark:bg-zinc-800 dark:text-zinc-100"
+              : "bg-white text-zinc-800 dark:bg-teal-900 dark:text-teal-50"
           }`}
         >
           {text}
@@ -169,7 +169,7 @@ function ChatInner({ tripId }: { tripId: string }) {
         )}
       </div>
       <form
-        className="flex gap-2 border-t border-zinc-100 p-3 dark:border-zinc-800"
+        className="flex gap-2 border-t border-teal-200 p-3 dark:border-teal-800/70"
         onSubmit={(e) => {
           e.preventDefault();
           const text = input.trim();
@@ -182,7 +182,7 @@ function ChatInner({ tripId }: { tripId: string }) {
           value={input}
           onChange={(e) => setInput(e.target.value)}
           placeholder="Where to?"
-          className="min-w-0 flex-1 rounded-full border border-zinc-200 bg-transparent px-4 py-2.5 text-sm outline-none focus:border-zinc-400 dark:border-zinc-700 dark:focus:border-zinc-500"
+          className="min-w-0 flex-1 rounded-full border border-teal-300 bg-white/70 px-4 py-2.5 text-sm outline-none focus:border-teal-500 dark:border-teal-700 dark:bg-teal-900/40 dark:focus:border-teal-400"
         />
         {isStreaming ? (
           <button
