@@ -54,9 +54,10 @@ export function TripCanvas({ tripId }: { tripId: string }) {
       </header>
 
       <main className="grid flex-1 grid-cols-1 gap-3 overflow-auto p-3 lg:grid-cols-[1.2fr_1.6fr_1fr] lg:grid-rows-[2fr_1fr] lg:overflow-hidden">
-        <Panel title="Map" className="min-h-48 lg:row-span-1">
-          <MapPanel tripId={tripId} />
-        </Panel>
+        {/* MapPanel renders its own panel chrome (and an expand/collapse
+            control), since it lifts out of the grid into a full-viewport
+            overlay when expanded. */}
+        <MapPanel tripId={tripId} />
         <Panel title="Day board" className="min-h-48 lg:row-span-2">
           <DayBoard tripId={tripId} />
         </Panel>
