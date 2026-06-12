@@ -2,6 +2,7 @@
 
 import { ChatPanel } from "@/components/chat-panel";
 import { ConnectionBadge } from "@/components/connection-badge";
+import { DayBoard } from "@/components/day-board";
 
 function Panel({
   title,
@@ -52,11 +53,9 @@ export function TripCanvas({ tripId }: { tripId: string }) {
           hint="Destination pins will appear here"
           className="min-h-48 lg:row-span-1"
         />
-        <Panel
-          title="Day board"
-          hint="Day-by-day itinerary cards will appear here"
-          className="min-h-48 lg:row-span-2"
-        />
+        <Panel title="Day board" className="min-h-48 lg:row-span-2">
+          <DayBoard tripId={tripId} />
+        </Panel>
         <Panel title="Chat" className="min-h-96 lg:row-span-2">
           <ChatPanel tripId={tripId} />
         </Panel>

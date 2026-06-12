@@ -1,31 +1,120 @@
 import { anthropic } from "@ai-sdk/anthropic";
 import { Invocation, type InvocationData } from "@ably/ai-transport";
 import { createAgentSession } from "@ably/ai-transport/vercel";
-import { convertToModelMessages, streamText } from "ai";
+import { convertToModelMessages, stepCountIs, streamText, tool } from "ai";
 import Ably from "ably";
 import { after } from "next/server";
+import { z } from "zod";
 
 import { tripIdFromSessionChannel } from "@/lib/channels";
+import { TripStateWriter } from "@/lib/trip-state-server";
 
 export const runtime = "nodejs";
 // The response returns immediately, but after() keeps streaming the AI
 // response over Ably — give it room to finish.
 export const maxDuration = 300;
 
-const SYSTEM_PROMPT = `You are Wayfarer, an expert AI travel planner. You help
-users plan trips through conversation.
+const SYSTEM_PROMPT = `You are Wayfarer, an expert AI travel planner. You work
+on a shared visual canvas: a map, a day-by-day board, and a budget tracker.
+The canvas — not the chat — is where the plan lives.
 
-Be concrete and decisive: suggest specific destinations, day-by-day plans, and
-bookings (flights, hotels, activities) with realistic indicative prices in the
-user's currency (default USD). Ask at most one clarifying question when the
-request is genuinely ambiguous; otherwise make sensible assumptions and state
-them briefly. Keep responses conversational and reasonably short — the
-detailed plan will live on the trip canvas, not in the chat.`;
+When the user asks you to plan (or extend) a trip, you MUST write the plan to
+the canvas using the tools, in this order:
+1. set_trip_meta — once, with a short trip title.
+2. add_destination — one per city/place visited, with accurate coordinates.
+3. add_day — one per day of the trip, in order.
+4. add_stop — every concrete item (flights, hotels, activities, meals,
+   sights, transport) goes on a day as a stop, with a realistic indicative
+   price in whole US dollars (0 for free things). Add stops to a day only
+   after creating that day.
+
+Keep your chat replies short and conversational — a sentence or two of
+rationale and any assumptions. Never repeat the full itinerary in prose; it's
+already on the canvas. Make sensible assumptions rather than asking more than
+one clarifying question.`;
+
+function slug(text: string): string {
+  return (
+    text
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "")
+      .slice(0, 32) || "item"
+  );
+}
+
+function buildTools(writer: TripStateWriter) {
+  return {
+    set_trip_meta: tool({
+      description:
+        "Set the trip's title and one-line summary, shown in the canvas header.",
+      inputSchema: z.object({
+        title: z.string().describe("Short trip title, e.g. 'Lisbon Long Weekend'"),
+        summary: z.string().optional().describe("One-line trip summary"),
+      }),
+      execute: async ({ title, summary }) => {
+        await writer.setMeta({ title, summary });
+        return { ok: true };
+      },
+    }),
+    add_destination: tool({
+      description:
+        "Add a destination (city or place visited on the trip) to the map.",
+      inputSchema: z.object({
+        name: z.string(),
+        country: z.string().optional(),
+        lat: z.number().describe("Latitude in decimal degrees"),
+        lng: z.number().describe("Longitude in decimal degrees"),
+      }),
+      execute: async ({ name, country, lat, lng }) => {
+        const id = slug(name);
+        await writer.addDestination({ id, name, country, lat, lng });
+        return { destinationId: id };
+      },
+    }),
+    add_day: tool({
+      description:
+        "Add a day to the itinerary board. Days must be created before stops can be added to them. Returns the dayId to use with add_stop.",
+      inputSchema: z.object({
+        index: z.number().int().min(1).describe("Day number, starting at 1"),
+        title: z.string().describe("Day heading, e.g. 'Day 1 — Alfama & the castle'"),
+        date: z.string().optional().describe("ISO date if known, e.g. 2026-07-18"),
+      }),
+      execute: async ({ index, title, date }) => {
+        const dayId = `day-${index}`;
+        await writer.addDay(dayId, index, title, date);
+        return { dayId };
+      },
+    }),
+    add_stop: tool({
+      description:
+        "Add a stop (booking, activity, meal, flight, hotel...) to an existing day on the board. Priced stops update the trip budget automatically.",
+      inputSchema: z.object({
+        dayId: z
+          .string()
+          .regex(/^day-\d+$/)
+          .describe("The dayId returned by add_day"),
+        name: z.string().describe("What it is, e.g. 'TAP flight LHR→LIS'"),
+        kind: z.enum(["flight", "hotel", "activity", "food", "transport", "sight"]),
+        time: z.string().optional().describe("24h start time, e.g. 09:30"),
+        location: z.string().optional(),
+        price: z.number().min(0).optional().describe("Indicative price in whole USD"),
+        notes: z.string().optional(),
+      }),
+      execute: async ({ dayId, name, kind, time, location, price, notes }) => {
+        const id = `${slug(name)}-${Math.random().toString(36).slice(2, 6)}`;
+        await writer.addStop(dayId, { id, name, kind, time, location, price, notes });
+        return { stopId: id };
+      },
+    }),
+  };
+}
 
 // AI Transport agent endpoint. The client's ChatTransport POSTs an invocation
 // here to wake the agent; the user's message is already on the Ably channel.
 // We load the conversation from channel history, run the model, and stream
-// the response back over the same channel (not the HTTP response body).
+// the response back over the same channel (not the HTTP response body) while
+// the tools write the structured plan into the trip's LiveObjects state.
 export async function POST(req: Request) {
   const ablyApiKey = process.env.ABLY_API_KEY;
   if (!ablyApiKey) {
@@ -55,10 +144,15 @@ export async function POST(req: Request) {
   // the conversation record; there is no database.
   const messages = await run.loadConversation();
 
+  const writer = new TripStateWriter(tripId, ablyApiKey);
+  await writer.ensureInitialized();
+
   const result = streamText({
     model: anthropic("claude-sonnet-4-6"),
     system: SYSTEM_PROMPT,
     messages: await convertToModelMessages(messages),
+    tools: buildTools(writer),
+    stopWhen: stepCountIs(24),
     abortSignal: run.abortSignal,
   });
 

@@ -1,6 +1,7 @@
 "use client";
 
 import Ably from "ably";
+import { LiveObjects } from "ably/liveobjects";
 import { AblyProvider } from "ably/react";
 import { createContext, useEffect, useState } from "react";
 
@@ -28,6 +29,7 @@ export function TripRealtimeProvider({
       authUrl: "/api/ably/token",
       authParams: { clientId: getVisitorId() },
       echoMessages: false,
+      plugins: { LiveObjects },
     });
     // Mount-only external-system connection: state must be set from the
     // effect because the client cannot be created during SSR or render.
