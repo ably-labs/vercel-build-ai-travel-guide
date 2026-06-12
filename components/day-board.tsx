@@ -45,7 +45,7 @@ function StopRow({ stop }: { stop: Stop }) {
   );
 
   const base =
-    "flex w-full items-start gap-2 rounded-lg border px-3 py-2 text-left text-sm transition-colors";
+    "wayfarer-stream-in flex w-full items-start gap-2 rounded-lg border px-3 py-2 text-left text-sm transition-colors";
 
   if (!locatable) {
     return (
@@ -81,7 +81,7 @@ function DayCard({ dayId, day }: { dayId: string; day: DayJson }) {
   return (
     <article
       data-day-id={dayId}
-      className="rounded-xl border border-zinc-200 bg-white p-3 dark:border-zinc-700 dark:bg-zinc-900"
+      className="wayfarer-stream-in rounded-xl border border-zinc-200 bg-white p-3 dark:border-zinc-700 dark:bg-zinc-900"
     >
       <header className="mb-2 flex items-baseline justify-between gap-2">
         <h3 className="text-sm font-semibold text-zinc-800 dark:text-zinc-100">
@@ -110,7 +110,7 @@ function DayBoardInner({ tripId }: { tripId: string }) {
 
   if (days.length === 0) {
     return (
-      <div className="flex flex-1 items-center justify-center p-4 text-center text-sm text-zinc-400 dark:text-zinc-500">
+      <div className="wayfarer-empty-hint flex flex-1 items-center justify-center p-4 text-center text-sm text-zinc-400 dark:text-zinc-500">
         Day-by-day itinerary cards will appear here as the AI plans
       </div>
     );

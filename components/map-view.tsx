@@ -493,7 +493,7 @@ export function MapView({ tripId }: { tripId: string }) {
       <div ref={containerRef} className="h-full w-full" />
       {empty && (
         <div className="pointer-events-none absolute inset-x-0 top-3 z-10 flex justify-center">
-          <span className="rounded-full bg-white/90 px-3 py-1 text-xs text-zinc-500 shadow dark:bg-zinc-900/90 dark:text-zinc-400">
+          <span className="wayfarer-empty-hint rounded-full bg-white/90 px-3 py-1 text-xs text-zinc-500 shadow dark:bg-zinc-900/90 dark:text-zinc-400">
             Destinations and itinerary stops will appear here as the AI plans
           </span>
         </div>

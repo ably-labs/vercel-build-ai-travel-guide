@@ -24,6 +24,11 @@ export default function Home() {
       >
         Start planning a trip
       </button>
+      <p className="max-w-sm text-xs text-zinc-400 dark:text-zinc-500">
+        One prompt fills a live map, day-by-day itinerary, and budget. Your
+        trip lives at its own link — reopen it anytime, or share it and plan
+        together in realtime.
+      </p>
     </main>
   );
 }
