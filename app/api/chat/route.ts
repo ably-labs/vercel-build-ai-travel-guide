@@ -146,31 +146,44 @@ function buildTools(
         // the same day replaces it rather than creating a duplicate card (and
         // double-counting its price). Re-planning that re-issues add_stop for
         // an existing item is therefore idempotent.
-        const id = `${dayId}-${slug(name)}`;
+        const nameSlug = slug(name);
+        const id = `${dayId}-${nameSlug}`;
+        // The same activity may already live on a *different* day (its id then
+        // carries that day's prefix, so the same-day replace above wouldn't
+        // catch it). Find any such prior copy and relocate it instead of
+        // minting a second one, so an activity the user is already doing never
+        // appears twice across the trip (AIT-951).
+        const relocateFrom =
+          (await writer.findStopByName(dayId, nameSlug)) ?? undefined;
         // Hard cap: a plan never holds more than MAX_ITINERARY_ITEMS stops.
         // The model is told to add the most popular stops first, so the items
         // retained at the cap are the highest-signal ones, not an arbitrary
         // slice. Refuse the call once full rather than truncating silently —
-        // but allow replacing a stop that already exists (same id), since that
-        // doesn't grow the plan.
+        // but allow replacing a stop that already exists (same id on this day,
+        // or the same activity being relocated from another day), since
+        // neither grows the plan.
         const existing = await writer.countStops();
-        const isReplacement = await writer.hasStop(dayId, id);
+        const isReplacement = (await writer.hasStop(dayId, id)) || relocateFrom != null;
         if (existing >= MAX_ITINERARY_ITEMS && !isReplacement) {
           return {
             error: `Itinerary is full: a plan may contain at most ${MAX_ITINERARY_ITEMS} stops, and this trip already has ${existing}. Do not add more stops. If a less important stop should make way for this one, remove it first with remove_stop, then re-add.`,
           };
         }
-        const stopId = await writer.addStop(dayId, {
-          id,
-          name,
-          kind,
-          time,
-          location,
-          lat,
-          lng,
-          price,
-          notes,
-        });
+        const stopId = await writer.addStop(
+          dayId,
+          {
+            id,
+            name,
+            kind,
+            time,
+            location,
+            lat,
+            lng,
+            price,
+            notes,
+          },
+          relocateFrom,
+        );
         return { stopId };
       },
     }),

@@ -147,28 +147,74 @@ export class TripStateWriter {
     return days[dayId]?.[`stop:${stopId}`] !== undefined;
   }
 
-  // Add a stop to a day. The map key is the stop's id, so re-adding a stop
-  // with the same id replaces it rather than duplicating the card. After
-  // writing the stop we reconcile the budget to the sum of the trip's current
-  // priced stops, so the total can never inflate from a re-add or retry — it
-  // always equals what's actually on the board. Returns the stop's final id.
-  async addStop(dayId: string, stop: Stop): Promise<string> {
+  // Find an existing copy of the *same activity* somewhere other than the
+  // target day. Stop ids are minted `${dayId}-${slug(name)}`, so re-adding an
+  // activity that already lives on a different day mints a *different* id and
+  // would leave the plan holding the same activity twice (AIT-951). We match
+  // on the trailing name slug — the id with its `${dayId}-` prefix stripped —
+  // and return the prior copy's day + full id so addStop can relocate it
+  // instead of duplicating. Returns null if this activity isn't elsewhere.
+  async findStopByName(
+    targetDayId: string,
+    nameSlug: string,
+  ): Promise<{ dayId: string; stopId: string } | null> {
+    if (!nameSlug) return null;
     const root = (await this.channel.object.get()) as Record<
       string,
       unknown
     > | null;
-    const ops: RestObjectOperation[] = [
-      {
-        path: `days.${dayId}`,
-        mapSet: {
-          key: `stop:${stop.id}`,
-          value: { json: { ...stop } },
-        },
-      },
-    ];
-    // Project the post-write state so the budget reconciles to include the
-    // stop we're about to set (replacing any prior value at the same id).
+    const days = (root?.days ?? {}) as Record<string, Record<string, unknown>>;
+    for (const [dayId, day] of Object.entries(days)) {
+      if (dayId === targetDayId) continue;
+      const match = `stop:${dayId}-${nameSlug}`;
+      if (day[match] !== undefined) {
+        return { dayId, stopId: `${dayId}-${nameSlug}` };
+      }
+    }
+    return null;
+  }
+
+  // Add a stop to a day. The map key is the stop's id, so re-adding a stop
+  // with the same id replaces it in place rather than duplicating the card.
+  //
+  // If the same activity already lives on a *different* day (`relocateFrom`),
+  // we drop the prior copy in the same atomic batch as the new placement, so
+  // the activity moves rather than appearing twice across the trip (AIT-951) —
+  // the board never shows it duplicated mid-write.
+  //
+  // After writing we reconcile the budget to the sum of the trip's current
+  // priced stops, so the total can never inflate from a re-add, retry, or
+  // relocation — it always equals what's actually on the board. Returns the
+  // stop's final id.
+  async addStop(
+    dayId: string,
+    stop: Stop,
+    relocateFrom?: { dayId: string; stopId: string },
+  ): Promise<string> {
+    const root = (await this.channel.object.get()) as Record<
+      string,
+      unknown
+    > | null;
+    const ops: RestObjectOperation[] = [];
+    // Project the post-write state so the budget reconciles against exactly
+    // what the board will hold once these ops apply.
     const days = { ...((root?.days ?? {}) as Record<string, Record<string, unknown>>) };
+    if (relocateFrom && relocateFrom.dayId !== dayId) {
+      ops.push({
+        path: `days.${relocateFrom.dayId}`,
+        mapRemove: { key: `stop:${relocateFrom.stopId}` },
+      });
+      const fromDay = { ...(days[relocateFrom.dayId] ?? {}) };
+      delete fromDay[`stop:${relocateFrom.stopId}`];
+      days[relocateFrom.dayId] = fromDay;
+    }
+    ops.push({
+      path: `days.${dayId}`,
+      mapSet: {
+        key: `stop:${stop.id}`,
+        value: { json: { ...stop } },
+      },
+    });
     days[dayId] = { ...(days[dayId] ?? {}), [`stop:${stop.id}`]: { ...stop } };
     const budgetOp = this.reconcileBudgetOp({ ...root, days });
     if (budgetOp) ops.push(budgetOp);
