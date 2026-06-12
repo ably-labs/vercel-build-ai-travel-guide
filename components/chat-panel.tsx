@@ -159,13 +159,13 @@ function ChatInner({ tripId }: { tripId: string }) {
           value={input}
           onChange={(e) => setInput(e.target.value)}
           placeholder="Where to?"
-          className="min-w-0 flex-1 rounded-full border border-zinc-200 bg-transparent px-4 py-2 text-sm outline-none focus:border-zinc-400 dark:border-zinc-700 dark:focus:border-zinc-500"
+          className="min-w-0 flex-1 rounded-full border border-zinc-200 bg-transparent px-4 py-2.5 text-sm outline-none focus:border-zinc-400 dark:border-zinc-700 dark:focus:border-zinc-500"
         />
         {isStreaming ? (
           <button
             type="button"
             onClick={() => void stop()}
-            className="rounded-full border border-zinc-300 px-4 py-2 text-sm font-medium text-zinc-600 hover:bg-zinc-100 dark:border-zinc-600 dark:text-zinc-300 dark:hover:bg-zinc-800"
+            className="shrink-0 rounded-full border border-zinc-300 px-4 py-2.5 text-sm font-medium text-zinc-600 hover:bg-zinc-100 dark:border-zinc-600 dark:text-zinc-300 dark:hover:bg-zinc-800"
           >
             Stop
           </button>
@@ -173,7 +173,7 @@ function ChatInner({ tripId }: { tripId: string }) {
           <button
             type="submit"
             disabled={!input.trim()}
-            className="rounded-full bg-zinc-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-40 dark:bg-white dark:text-zinc-900"
+            className="shrink-0 rounded-full bg-zinc-900 px-4 py-2.5 text-sm font-medium text-white disabled:opacity-40 dark:bg-white dark:text-zinc-900"
           >
             Send
           </button>
