@@ -2,6 +2,7 @@
 
 import { useContext } from "react";
 
+import { useSelectedStop } from "@/components/selected-stop";
 import { RealtimeReadyContext } from "@/components/trip-realtime-provider";
 import { useTripState } from "@/components/use-trip-state";
 import {
@@ -13,8 +14,15 @@ import {
 } from "@/lib/trip-state";
 
 function StopRow({ stop }: { stop: Stop }) {
-  return (
-    <li className="flex items-start gap-2 rounded-lg border border-zinc-100 bg-zinc-50 px-3 py-2 text-sm dark:border-zinc-800 dark:bg-zinc-800/50">
+  const { selectedStopId, selectStop } = useSelectedStop();
+  // Only stops with map coordinates can be flown to; the rest stay as plain
+  // display rows.
+  const locatable =
+    typeof stop.lat === "number" && typeof stop.lng === "number";
+  const selected = locatable && selectedStopId === stop.id;
+
+  const body = (
+    <>
       <span aria-hidden className="mt-0.5">
         {STOP_KIND_ICONS[stop.kind] ?? "•"}
       </span>
@@ -33,6 +41,37 @@ function StopRow({ stop }: { stop: Stop }) {
           {[stop.time, stop.location].filter(Boolean).join(" · ")}
         </span>
       </span>
+    </>
+  );
+
+  const base =
+    "flex w-full items-start gap-2 rounded-lg border px-3 py-2 text-left text-sm transition-colors";
+
+  if (!locatable) {
+    return (
+      <li
+        className={`${base} border-zinc-100 bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-800/50`}
+      >
+        {body}
+      </li>
+    );
+  }
+
+  return (
+    <li>
+      <button
+        type="button"
+        onClick={() => selectStop(stop.id)}
+        aria-pressed={selected}
+        title="Show on map"
+        className={`${base} cursor-pointer ${
+          selected
+            ? "border-sky-400 bg-sky-50 ring-1 ring-sky-300 dark:border-sky-500 dark:bg-sky-950/40 dark:ring-sky-700"
+            : "border-zinc-100 bg-zinc-50 hover:border-zinc-300 hover:bg-zinc-100 dark:border-zinc-800 dark:bg-zinc-800/50 dark:hover:border-zinc-600 dark:hover:bg-zinc-800"
+        }`}
+      >
+        {body}
+      </button>
     </li>
   );
 }

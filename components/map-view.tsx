@@ -7,6 +7,7 @@ import { useCallback, useEffect, useRef } from "react";
 
 import "maplibre-gl/dist/maplibre-gl.css";
 
+import { useSelectedStop } from "@/components/selected-stop";
 import { useTripState } from "@/components/use-trip-state";
 import { pinsChannelName } from "@/lib/channels";
 import {
@@ -173,6 +174,7 @@ function routeFeatures(placed: PlacedStop[]): FeatureCollection {
 export function MapView({ tripId }: { tripId: string }) {
   const ably = useAbly();
   const state = useTripState(tripId);
+  const { selectedStopId, selectNonce } = useSelectedStop();
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
   const markersRef = useRef(new Map<string, maplibregl.Marker>());
@@ -349,6 +351,30 @@ export function MapView({ tripId }: { tripId: string }) {
     if (changed) fitToPins();
     restoredRef.current = true;
   }, [state, fitToPins]);
+
+  // Fly to a stop when it's selected in the day board, and open its popup.
+  // Keyed on selectNonce (not just the id) so re-clicking the same row
+  // re-centres the map. The stop's marker is the source of truth for its
+  // coordinates, so this naturally waits for the marker to exist (the state
+  // sync above creates it) and no-ops for stops without a placed marker. If the
+  // map is mid-fly to another stop, flyTo cancels the in-flight animation.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !selectedStopId) return;
+    const entry = stopMarkersRef.current.get(selectedStopId);
+    if (!entry) return;
+    const lngLat = entry.marker.getLngLat();
+    map.flyTo({
+      center: lngLat,
+      zoom: Math.max(map.getZoom(), 13),
+      duration: 900,
+      essential: true,
+    });
+    const popup = entry.marker.getPopup();
+    if (popup && !popup.isOpen()) entry.marker.togglePopup();
+    // selectNonce makes a repeat select re-trigger; state is included so a
+    // select that lands just before the marker exists re-runs once it does.
+  }, [selectedStopId, selectNonce, state]);
 
   // Drop pins the instant the AI announces them, ahead of (and deduped
   // against) the LiveObjects state sync.
