@@ -203,3 +203,79 @@ body {
 .wayfarer-budget-pop {
   animation: wayfarer-budget-pop 0.6s ease-out;
 }
+
+/* Proportional budget-category bars. The track is a fixed-width rail; the fill
+   is sized inline (width: <pct>%) and eases to that width whenever the total
+   shifts, so a stop landing mid-stream visibly grows its category. */
+.wayfarer-budget-bar-track {
+  height: 4px;
+  width: 100%;
+  border-radius: 9999px;
+  background: rgb(0 0 0 / 0.06);
+  overflow: hidden;
+}
+
+@media (prefers-color-scheme: dark) {
+  .wayfarer-budget-bar-track {
+    background: rgb(255 255 255 / 0.1);
+  }
+}
+
+.wayfarer-budget-bar-fill {
+  height: 100%;
+  border-radius: 9999px;
+  background: #059669;
+  transition: width 0.6s cubic-bezier(0.2, 0.8, 0.3, 1);
+}
+
+/* Streaming-in entrance for itinerary day cards and stop rows: a short rise +
+   fade so content the AI writes mid-stream arrives legibly rather than
+   popping. Keyed in React (see day-board) so it plays once on mount. */
+@keyframes wayfarer-stream-in {
+  0% {
+    transform: translateY(6px);
+    opacity: 0;
+  }
+  100% {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+.wayfarer-stream-in {
+  animation: wayfarer-stream-in 0.32s cubic-bezier(0.2, 0.8, 0.3, 1) both;
+}
+
+/* A new viewer should never see a frozen blank canvas while the realtime
+   connection comes up. Empty-state copy breathes gently so the surface reads
+   as "waiting", not "broken". */
+@keyframes wayfarer-fade-pulse {
+  0%,
+  100% {
+    opacity: 0.55;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+.wayfarer-empty-hint {
+  animation: wayfarer-fade-pulse 2.4s ease-in-out infinite;
+}
+
+/* Respect users who ask for less motion: keep the final state, drop the
+   movement. Entrance/pulse animations collapse to no-ops; the budget bar still
+   resizes but instantly. */
+@media (prefers-reduced-motion: reduce) {
+  .wayfarer-pin-drop,
+  .wayfarer-stop-pop,
+  .wayfarer-budget-pop,
+  .wayfarer-stream-in,
+  .wayfarer-empty-hint {
+    animation: none;
+  }
+
+  .wayfarer-budget-bar-fill {
+    transition: none;
+  }
+}

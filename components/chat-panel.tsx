@@ -14,6 +14,14 @@ import { RealtimeReadyContext } from "@/components/trip-realtime-provider";
 import { sessionChannelName } from "@/lib/channels";
 import { getVisitorId } from "@/lib/visitor";
 
+// One-tap example prompts shown on a fresh trip so a cold demo starts without
+// anyone having to think of what to type. Picking one sends it immediately.
+const SEED_PROMPTS = [
+  "Plan a long weekend in Lisbon",
+  "5 days in Tokyo for first-timers",
+  "A relaxed week in the Amalfi Coast",
+] as const;
+
 interface ToolPart {
   type: string;
   toolName?: string;
@@ -133,10 +141,25 @@ function ChatInner({ tripId }: { tripId: string }) {
         className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto p-3"
       >
         {messages.length === 0 && (
-          <p className="m-auto max-w-60 text-center text-sm text-zinc-400 dark:text-zinc-500">
-            Tell the AI where you want to go — try &ldquo;Plan me a long
-            weekend in Lisbon&rdquo;
-          </p>
+          <div className="m-auto flex max-w-xs flex-col items-center gap-3 text-center">
+            <p className="text-sm text-zinc-500 dark:text-zinc-400">
+              Tell the AI where you want to go, and watch the map, itinerary,
+              and budget fill in live. Try one of these:
+            </p>
+            <div className="flex flex-col gap-2">
+              {SEED_PROMPTS.map((prompt) => (
+                <button
+                  key={prompt}
+                  type="button"
+                  disabled={isStreaming}
+                  onClick={() => void sendMessage({ text: prompt })}
+                  className="rounded-full border border-zinc-200 bg-white px-4 py-2 text-sm text-zinc-700 transition hover:border-zinc-400 hover:bg-zinc-50 disabled:opacity-40 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:border-zinc-500 dark:hover:bg-zinc-800"
+                >
+                  {prompt}
+                </button>
+              ))}
+            </div>
+          </div>
         )}
         {messages.map((message) => (
           <MessageBubble key={message.id} message={message} />
