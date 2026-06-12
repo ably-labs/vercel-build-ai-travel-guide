@@ -12,18 +12,31 @@ function Panel({
   title,
   hint,
   className = "",
+  accent = false,
   children,
 }: {
   title: string;
   hint?: string;
   className?: string;
+  accent?: boolean;
   children?: React.ReactNode;
 }) {
+  // The chat panel reads as the AI surface: a teal brand-accent tint and
+  // border set it apart from the neutral zinc canvas panels (map, itinerary,
+  // budget). Tuned for AA legibility in both light and dark mode.
+  const surface = accent
+    ? "border-teal-300 bg-teal-50 dark:border-teal-800 dark:bg-teal-950"
+    : "border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900";
+  const headerBorder = accent
+    ? "border-teal-200 text-teal-900 dark:border-teal-800/70 dark:text-teal-100"
+    : "border-zinc-100 text-zinc-700 dark:border-zinc-800 dark:text-zinc-200";
   return (
     <section
-      className={`flex min-h-0 flex-col rounded-xl border border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900 ${className}`}
+      className={`flex min-h-0 flex-col rounded-xl border ${surface} ${className}`}
     >
-      <header className="border-b border-zinc-100 px-4 py-2.5 text-sm font-semibold text-zinc-700 dark:border-zinc-800 dark:text-zinc-200">
+      <header
+        className={`border-b px-4 py-2.5 text-sm font-semibold ${headerBorder}`}
+      >
         {title}
       </header>
       {children ?? (
@@ -67,7 +80,11 @@ export function TripCanvas({ tripId }: { tripId: string }) {
           <Panel title="Itinerary" className="min-h-56 md:min-h-0 lg:row-span-2">
             <DayBoard tripId={tripId} />
           </Panel>
-          <Panel title="Chat" className="min-h-96 md:min-h-64 lg:row-span-2">
+          <Panel
+            title="Chat"
+            accent
+            className="min-h-96 md:min-h-64 lg:row-span-2"
+          >
             <ChatPanel tripId={tripId} />
           </Panel>
           <Panel title="Budget" className="min-h-32 md:min-h-0">
