@@ -41,14 +41,16 @@ function Panel({
 export function TripCanvas({ tripId }: { tripId: string }) {
   return (
     <div className="flex h-dvh flex-col bg-zinc-50 dark:bg-zinc-950">
-      <header className="flex items-center justify-between border-b border-zinc-200 bg-white px-4 py-3 dark:border-zinc-800 dark:bg-zinc-900">
-        <div className="flex items-baseline gap-3">
-          <h1 className="text-base font-bold tracking-tight">Wayfarer</h1>
-          <span className="font-mono text-xs text-zinc-400">
+      <header className="flex items-center justify-between gap-2 border-b border-zinc-200 bg-white px-3 py-3 sm:px-4 dark:border-zinc-800 dark:bg-zinc-900">
+        <div className="flex min-w-0 items-baseline gap-2 sm:gap-3">
+          <h1 className="shrink-0 text-base font-bold tracking-tight">
+            Wayfarer
+          </h1>
+          <span className="hidden truncate font-mono text-xs text-zinc-400 sm:inline">
             trip/{tripId}
           </span>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex shrink-0 items-center gap-2 sm:gap-3">
           <PresenceAvatars tripId={tripId} />
           <ConnectionBadge />
         </div>
@@ -57,18 +59,18 @@ export function TripCanvas({ tripId }: { tripId: string }) {
       {/* Selecting a stop in the day board flies the map to it, so both panels
           share the selected-stop context. */}
       <SelectedStopProvider>
-        <main className="grid flex-1 grid-cols-1 gap-3 overflow-auto p-3 lg:grid-cols-[1.2fr_1.6fr_1fr] lg:grid-rows-[2fr_1fr] lg:overflow-hidden">
+        <main className="grid flex-1 grid-cols-1 gap-3 overflow-auto p-3 md:grid-cols-2 md:grid-rows-[minmax(14rem,1.3fr)_minmax(0,1fr)] lg:grid-cols-[1.2fr_1.6fr_1fr] lg:grid-rows-[2fr_1fr] lg:overflow-hidden">
           {/* MapPanel renders its own panel chrome (and an expand/collapse
               control), since it lifts out of the grid into a full-viewport
               overlay when expanded. */}
           <MapPanel tripId={tripId} />
-          <Panel title="Day board" className="min-h-48 lg:row-span-2">
+          <Panel title="Day board" className="min-h-56 md:min-h-0 lg:row-span-2">
             <DayBoard tripId={tripId} />
           </Panel>
-          <Panel title="Chat" className="min-h-96 lg:row-span-2">
+          <Panel title="Chat" className="min-h-96 md:min-h-64 lg:row-span-2">
             <ChatPanel tripId={tripId} />
           </Panel>
-          <Panel title="Budget" className="min-h-32">
+          <Panel title="Budget" className="min-h-32 md:min-h-0">
             <BudgetPanel tripId={tripId} />
           </Panel>
         </main>

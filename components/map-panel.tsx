@@ -146,14 +146,16 @@ export function MapPanel({ tripId }: { tripId: string }) {
       {/* When expanded, a spacer holds the map's place in the grid so the
           surrounding itinerary/budget panels don't reflow as the map lifts out
           into the overlay. */}
-      {expanded && <div className="min-h-48 lg:row-span-1" aria-hidden />}
+      {expanded && (
+        <div className="min-h-56 md:min-h-0 lg:row-span-1" aria-hidden />
+      )}
       <section
         ref={sectionRef}
         className={
           "flex min-h-0 flex-col overflow-hidden rounded-xl border border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900 " +
           (expanded
             ? "fixed inset-2 z-50 shadow-2xl sm:inset-4"
-            : "relative min-h-48 lg:row-span-1")
+            : "relative min-h-56 md:min-h-0 lg:row-span-1")
         }
       >
         <header className="flex items-center justify-between border-b border-zinc-100 px-4 py-2.5 text-sm font-semibold text-zinc-700 dark:border-zinc-800 dark:text-zinc-200">
@@ -164,7 +166,7 @@ export function MapPanel({ tripId }: { tripId: string }) {
             aria-label={expanded ? "Collapse map" : "Expand map"}
             aria-pressed={expanded}
             title={expanded ? "Collapse map (Esc)" : "Expand map"}
-            className="flex items-center justify-center rounded-md p-1 text-zinc-500 transition-colors hover:bg-zinc-100 hover:text-zinc-700 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-zinc-200"
+            className="-mr-1 flex h-9 w-9 items-center justify-center rounded-md text-zinc-500 transition-colors hover:bg-zinc-100 hover:text-zinc-700 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-zinc-200"
           >
             {expanded ? <CollapseIcon /> : <ExpandIcon />}
           </button>
