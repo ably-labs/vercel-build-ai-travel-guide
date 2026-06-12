@@ -42,3 +42,5 @@ Use `issue_type: "Bug"` for bugs and `issue_type: "Story"` for features. Adjust 
 Report back with:
 - The ticket key (e.g. `AIT-938`)
 - Direct link: `https://ably.atlassian.net/browse/<key>`
+
+The ticket lands in "To Do" under AIT-936, so if `autopilot` is running (`/loop /autopilot`) it will be picked up, ordered against its dependencies, implemented, and raised as a PR automatically — no further action needed until the PR is ready for review.
