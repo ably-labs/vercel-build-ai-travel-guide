@@ -1,0 +1,35 @@
+name: Vercel production deploy
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: vercel-production
+  cancel-in-progress: false
+
+env:
+  VERCEL_ORG_ID: team_9FMXoLt7MhHBUdJllzuq4bKC
+  VERCEL_PROJECT_ID: prj_Xo8152D5GNJR9UwXo7mpIp0zY4hV
+
+jobs:
+  deploy-production:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Deploy to Vercel (production)
+        run: |
+          npm install --global vercel@latest
+          DEPLOY_URL=$(vercel deploy --prod --yes --token="$VERCEL_TOKEN")
+          echo "Production: $DEPLOY_URL" >> "$GITHUB_STEP_SUMMARY"
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
