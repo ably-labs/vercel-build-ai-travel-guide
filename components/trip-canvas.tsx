@@ -64,7 +64,7 @@ export function TripCanvas({ tripId }: { tripId: string }) {
               control), since it lifts out of the grid into a full-viewport
               overlay when expanded. */}
           <MapPanel tripId={tripId} />
-          <Panel title="Day board" className="min-h-56 md:min-h-0 lg:row-span-2">
+          <Panel title="Itinerary" className="min-h-56 md:min-h-0 lg:row-span-2">
             <DayBoard tripId={tripId} />
           </Panel>
           <Panel title="Chat" className="min-h-96 md:min-h-64 lg:row-span-2">
