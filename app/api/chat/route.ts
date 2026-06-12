@@ -6,7 +6,8 @@ import Ably from "ably";
 import { after } from "next/server";
 import { z } from "zod";
 
-import { tripIdFromSessionChannel } from "@/lib/channels";
+import { pinsChannelName, tripIdFromSessionChannel } from "@/lib/channels";
+import type { Destination } from "@/lib/trip-state";
 import { TripStateWriter } from "@/lib/trip-state-server";
 
 export const runtime = "nodejs";
@@ -43,7 +44,10 @@ function slug(text: string): string {
   );
 }
 
-function buildTools(writer: TripStateWriter) {
+function buildTools(
+  writer: TripStateWriter,
+  announcePin: (destination: Destination) => void,
+) {
   return {
     set_trip_meta: tool({
       description:
@@ -67,9 +71,10 @@ function buildTools(writer: TripStateWriter) {
         lng: z.number().describe("Longitude in decimal degrees"),
       }),
       execute: async ({ name, country, lat, lng }) => {
-        const id = slug(name);
-        await writer.addDestination({ id, name, country, lat, lng });
-        return { destinationId: id };
+        const destination = { id: slug(name), name, country, lat, lng };
+        await writer.addDestination(destination);
+        announcePin(destination);
+        return { destinationId: destination.id };
       },
     }),
     add_day: tool({
@@ -147,11 +152,21 @@ export async function POST(req: Request) {
   const writer = new TripStateWriter(tripId, ablyApiKey);
   await writer.ensureInitialized();
 
+  // Pin events are a fire-and-forget animation signal for the map; the
+  // durable destination is already in LiveObjects, so a lost event must not
+  // fail the tool call.
+  const pinsChannel = ably.channels.get(pinsChannelName(tripId));
+  const announcePin = (destination: Destination) => {
+    pinsChannel.publish("pin", destination).catch((error) => {
+      console.error("Pin event publish failed:", error);
+    });
+  };
+
   const result = streamText({
     model: anthropic("claude-sonnet-4-6"),
     system: SYSTEM_PROMPT,
     messages: await convertToModelMessages(messages),
-    tools: buildTools(writer),
+    tools: buildTools(writer, announcePin),
     stopWhen: stepCountIs(24),
     abortSignal: run.abortSignal,
   });

@@ -1,8 +1,10 @@
 "use client";
 
+import { BudgetPanel } from "@/components/budget-panel";
 import { ChatPanel } from "@/components/chat-panel";
 import { ConnectionBadge } from "@/components/connection-badge";
 import { DayBoard } from "@/components/day-board";
+import { MapPanel } from "@/components/map-panel";
 
 function Panel({
   title,
@@ -48,22 +50,18 @@ export function TripCanvas({ tripId }: { tripId: string }) {
       </header>
 
       <main className="grid flex-1 grid-cols-1 gap-3 overflow-auto p-3 lg:grid-cols-[1.2fr_1.6fr_1fr] lg:grid-rows-[2fr_1fr] lg:overflow-hidden">
-        <Panel
-          title="Map"
-          hint="Destination pins will appear here"
-          className="min-h-48 lg:row-span-1"
-        />
+        <Panel title="Map" className="min-h-48 lg:row-span-1">
+          <MapPanel tripId={tripId} />
+        </Panel>
         <Panel title="Day board" className="min-h-48 lg:row-span-2">
           <DayBoard tripId={tripId} />
         </Panel>
         <Panel title="Chat" className="min-h-96 lg:row-span-2">
           <ChatPanel tripId={tripId} />
         </Panel>
-        <Panel
-          title="Budget"
-          hint="Running trip total will appear here"
-          className="min-h-32"
-        />
+        <Panel title="Budget" className="min-h-32">
+          <BudgetPanel tripId={tripId} />
+        </Panel>
       </main>
     </div>
   );
