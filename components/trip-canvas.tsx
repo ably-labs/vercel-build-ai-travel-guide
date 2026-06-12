@@ -5,6 +5,7 @@ import { ChatPanel } from "@/components/chat-panel";
 import { ConnectionBadge } from "@/components/connection-badge";
 import { DayBoard } from "@/components/day-board";
 import { MapPanel } from "@/components/map-panel";
+import { PresenceAvatars } from "@/components/presence-avatars";
 
 function Panel({
   title,
@@ -46,7 +47,10 @@ export function TripCanvas({ tripId }: { tripId: string }) {
             trip/{tripId}
           </span>
         </div>
-        <ConnectionBadge />
+        <div className="flex items-center gap-3">
+          <PresenceAvatars tripId={tripId} />
+          <ConnectionBadge />
+        </div>
       </header>
 
       <main className="grid flex-1 grid-cols-1 gap-3 overflow-auto p-3 lg:grid-cols-[1.2fr_1.6fr_1fr] lg:grid-rows-[2fr_1fr] lg:overflow-hidden">

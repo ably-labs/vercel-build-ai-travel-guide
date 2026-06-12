@@ -18,6 +18,13 @@ export function pinsChannelName(tripId: string): string {
   return `trip:${tripId}:pins`;
 }
 
+// Who is currently viewing the trip, via Ably presence. Kept separate from
+// the state channel (which attaches with object-only modes) so the presence
+// set attaches with the default modes presence needs.
+export function presenceChannelName(tripId: string): string {
+  return `trip:${tripId}:presence`;
+}
+
 // Parse and validate a session channel name received from the network.
 // Returns the tripId, or null if it isn't a well-formed trip session channel.
 export function tripIdFromSessionChannel(channelName: string): string | null {
