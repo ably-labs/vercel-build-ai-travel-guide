@@ -206,7 +206,13 @@ function routeFeatures(placed: PlacedStop[]): FeatureCollection {
 export function MapView({ tripId }: { tripId: string }) {
   const ably = useAbly();
   const state = useTripState(tripId);
-  const { selectedStopId, selectNonce } = useSelectedStop();
+  const { selectedStopId, selectNonce, selectStop } = useSelectedStop();
+  // Latest selectStop, read inside marker click handlers so we can attach them
+  // once at marker-creation time without re-creating markers on every render.
+  const selectStopRef = useRef(selectStop);
+  useEffect(() => {
+    selectStopRef.current = selectStop;
+  }, [selectStop]);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
   const markersRef = useRef(new Map<string, maplibregl.Marker>());
@@ -382,9 +388,20 @@ export function MapView({ tripId }: { tripId: string }) {
       const existing = stopMarkers.get(id);
       if (existing?.json === json) return;
       existing?.marker.remove();
-      const marker = new maplibregl.Marker({
-        element: stopElement(placedStop, existing ? false : restoredRef.current),
-      })
+      const element = stopElement(placedStop, existing ? false : restoredRef.current);
+      // Route marker clicks through stop selection rather than MapLibre's
+      // default popup toggle, so opening a card on the map closes any other
+      // open card too (the selection effect enforces one-open-at-a-time).
+      // Capture phase + stopPropagation prevents MapLibre's own click-to-toggle.
+      element.addEventListener(
+        "click",
+        (event) => {
+          event.stopPropagation();
+          selectStopRef.current(placedStop.stop.id);
+        },
+        true,
+      );
+      const marker = new maplibregl.Marker({ element })
         .setLngLat([placedStop.stop.lng!, placedStop.stop.lat!])
         .setPopup(
           new maplibregl.Popup({
@@ -426,6 +443,13 @@ export function MapView({ tripId }: { tripId: string }) {
       zoom: Math.max(map.getZoom(), 13),
       duration: 900,
       essential: true,
+    });
+    // Only one stop card is shown at a time: close any other open popups
+    // before opening the selected stop's, so cards replace rather than stack.
+    stopMarkersRef.current.forEach((other, id) => {
+      if (id === selectedStopId) return;
+      const otherPopup = other.marker.getPopup();
+      if (otherPopup?.isOpen()) other.marker.togglePopup();
     });
     const popup = entry.marker.getPopup();
     if (popup && !popup.isOpen()) entry.marker.togglePopup();
