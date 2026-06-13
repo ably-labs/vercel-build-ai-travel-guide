@@ -55,6 +55,10 @@ function ToolActivity({ part }: { part: ToolPart }) {
         return input.name
           ? `Adding ${String(input.name)}`
           : "Adding a stop…";
+      case "suggest_landmark":
+        return input.name
+          ? `Suggesting ${String(input.name)}`
+          : "Suggesting a landmark…";
       case "web_search":
         return input.query
           ? `Searching: ${String(input.query)}`
