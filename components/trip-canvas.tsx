@@ -72,22 +72,22 @@ export function TripCanvas({ tripId }: { tripId: string }) {
       {/* Selecting a stop in the day board flies the map to it, so both panels
           share the selected-stop context. */}
       <SelectedStopProvider>
-        <main className="grid flex-1 grid-cols-1 gap-3 overflow-auto p-3 md:grid-cols-2 md:grid-rows-[minmax(14rem,1.3fr)_minmax(0,1fr)] lg:grid-cols-[1.2fr_1.6fr_1fr] lg:grid-rows-[2fr_1fr] lg:overflow-hidden">
+        <main className="grid flex-1 grid-cols-1 gap-2 overflow-auto p-2 md:grid-cols-2 md:grid-rows-[minmax(14rem,1.3fr)_minmax(0,1fr)] md:gap-3 md:p-3 lg:grid-cols-[1.2fr_1.6fr_1fr] lg:grid-rows-[2fr_1fr] lg:overflow-hidden">
           {/* MapPanel renders its own panel chrome (and an expand/collapse
               control), since it lifts out of the grid into a full-viewport
               overlay when expanded. */}
           <MapPanel tripId={tripId} />
-          <Panel title="Itinerary" className="min-h-56 md:min-h-0 lg:row-span-2">
+          <Panel title="Itinerary" className="min-h-80 md:min-h-0 lg:row-span-2">
             <DayBoard tripId={tripId} />
           </Panel>
           <Panel
             title="Chat"
             accent
-            className="min-h-96 md:min-h-64 lg:row-span-2"
+            className="min-h-[28rem] md:min-h-64 lg:row-span-2"
           >
             <ChatPanel tripId={tripId} />
           </Panel>
-          <Panel title="Budget" className="min-h-32 md:min-h-0">
+          <Panel title="Budget" className="min-h-44 md:min-h-0">
             <BudgetPanel tripId={tripId} />
           </Panel>
         </main>
