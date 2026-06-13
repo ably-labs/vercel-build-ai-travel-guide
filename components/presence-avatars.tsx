@@ -5,79 +5,11 @@ import { useContext } from "react";
 
 import { RealtimeReadyContext } from "@/components/trip-realtime-provider";
 import { presenceChannelName } from "@/lib/channels";
+// The same deterministic identity (name + initials + colour) used here for
+// presence avatars is reused for chat message attribution, so a given
+// collaborator looks identical in the nav bar and in the chat list.
+import { identityFor } from "@/lib/identity";
 import { getVisitorId } from "@/lib/visitor";
-
-// Auth is out of scope (anyone with the link is a collaborator), so each
-// participant gets a deterministic identity derived from their clientId.
-// Every browser derives the same name and colour for a given clientId, so
-// nothing needs to travel in the presence payload.
-const ADJECTIVES = [
-  "Amber",
-  "Brisk",
-  "Coral",
-  "Dusty",
-  "Eager",
-  "Fabled",
-  "Gilded",
-  "Hardy",
-  "Indigo",
-  "Jolly",
-  "Keen",
-  "Lucky",
-  "Mellow",
-  "Nimble",
-  "Plucky",
-  "Roving",
-];
-
-const TRAVELLERS = [
-  "Albatross",
-  "Bison",
-  "Caravan",
-  "Drifter",
-  "Explorer",
-  "Falcon",
-  "Gull",
-  "Heron",
-  "Ibis",
-  "Jetsetter",
-  "Kestrel",
-  "Lynx",
-  "Mariner",
-  "Nomad",
-  "Osprey",
-  "Pilgrim",
-];
-
-const COLORS = [
-  "#0ea5e9", // sky
-  "#10b981", // emerald
-  "#f59e0b", // amber
-  "#8b5cf6", // violet
-  "#ef4444", // red
-  "#14b8a6", // teal
-  "#ec4899", // pink
-  "#6366f1", // indigo
-];
-
-function hashOf(value: string): number {
-  let hash = 0;
-  for (let i = 0; i < value.length; i++) {
-    hash = (hash * 31 + value.charCodeAt(i)) | 0;
-  }
-  return Math.abs(hash);
-}
-
-function identityFor(clientId: string) {
-  const hash = hashOf(clientId);
-  const adjective = ADJECTIVES[hash % ADJECTIVES.length];
-  const traveller = TRAVELLERS[Math.floor(hash / 16) % TRAVELLERS.length];
-  return {
-    name: `${adjective} ${traveller}`,
-    initials: `${adjective[0]}${traveller[0]}`,
-    color: COLORS[hash % COLORS.length],
-  };
-}
 
 const MAX_AVATARS = 5;
 

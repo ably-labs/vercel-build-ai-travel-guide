@@ -12,7 +12,23 @@ import { useContext, useEffect, useRef, useState } from "react";
 
 import { RealtimeReadyContext } from "@/components/trip-realtime-provider";
 import { sessionChannelName } from "@/lib/channels";
+import { identityFor } from "@/lib/identity";
 import { getVisitorId } from "@/lib/visitor";
+
+// Attribution metadata stamped on every user message we send. It rides along
+// on the message verbatim (AI Transport round-trips a user message's
+// `metadata` to every other collaborator), so each client can attribute an
+// incoming message to its sender without anything extra on the wire.
+interface SenderMetadata {
+  senderClientId?: string;
+}
+
+// Pull the sender's clientId out of a message's metadata, if present. Only
+// user messages carry it (the AI assistant's messages have none).
+function senderClientIdOf(message: UIMessage): string | undefined {
+  const meta = message.metadata as SenderMetadata | undefined;
+  return meta?.senderClientId;
+}
 
 // One-tap example prompts shown on a fresh trip so a cold demo starts without
 // anyone having to think of what to type. Picking one sends it immediately.
@@ -78,7 +94,34 @@ function ToolActivity({ part }: { part: ToolPart }) {
   );
 }
 
-function MessageBubble({ message }: { message: UIMessage }) {
+// Small avatar + name label shown above a collaborator's chat message. Uses
+// the exact same identity derivation as the nav-bar presence avatars, so the
+// same person carries the same name and colour in both places.
+function SenderLabel({ clientId }: { clientId: string }) {
+  const { name, initials, color } = identityFor(clientId);
+  return (
+    <div className="flex items-center gap-1.5 px-1">
+      <span
+        aria-hidden
+        className="flex h-4 w-4 items-center justify-center rounded-full text-[8px] font-bold text-white"
+        style={{ backgroundColor: color }}
+      >
+        {initials}
+      </span>
+      <span className="text-xs font-medium text-zinc-500 dark:text-zinc-400">
+        {name}
+      </span>
+    </div>
+  );
+}
+
+function MessageBubble({
+  message,
+  selfId,
+}: {
+  message: UIMessage;
+  selfId: string;
+}) {
   const isUser = message.role === "user";
   const text = message.parts
     .map((part) => (part.type === "text" ? part.text : ""))
@@ -87,10 +130,21 @@ function MessageBubble({ message }: { message: UIMessage }) {
   if (!text && toolParts.length === 0) {
     return null;
   }
+  // Attribute user messages sent by a *different* collaborator. Our own
+  // messages stay anchored on the right with no label (they're already "you");
+  // assistant messages have no sender.
+  const senderClientId = isUser ? senderClientIdOf(message) : undefined;
+  const fromOther =
+    senderClientId !== undefined && senderClientId !== selfId
+      ? senderClientId
+      : undefined;
   return (
     <div
-      className={`flex flex-col gap-1 ${isUser ? "items-end" : "items-start"}`}
+      className={`flex flex-col gap-1 ${
+        fromOther ? "items-start" : isUser ? "items-end" : "items-start"
+      }`}
     >
+      {fromOther && <SenderLabel clientId={fromOther} />}
       {toolParts.length > 0 && (
         <div className="flex flex-col gap-0.5 py-0.5">
           {toolParts.map((part, i) => (
@@ -101,10 +155,15 @@ function MessageBubble({ message }: { message: UIMessage }) {
       {text && (
         <div
           className={`max-w-[85%] whitespace-pre-wrap rounded-2xl px-3 py-2 text-sm ${
-            isUser
-              ? "bg-zinc-900 text-white dark:bg-white dark:text-zinc-900"
-              : "bg-white text-zinc-800 dark:bg-teal-900 dark:text-teal-50"
+            fromOther
+              ? "border-l-2 bg-zinc-100 text-zinc-800 dark:bg-zinc-800 dark:text-zinc-100"
+              : isUser
+                ? "bg-zinc-900 text-white dark:bg-white dark:text-zinc-900"
+                : "bg-white text-zinc-800 dark:bg-teal-900 dark:text-teal-50"
           }`}
+          style={
+            fromOther ? { borderLeftColor: identityFor(fromOther).color } : undefined
+          }
         >
           {text}
         </div>
@@ -117,6 +176,7 @@ function ChatInner({ tripId }: { tripId: string }) {
   const { chatTransport } = useChatTransport();
   const [input, setInput] = useState("");
   const scrollRef = useRef<HTMLDivElement>(null);
+  const selfId = getVisitorId();
 
   const { messages, setMessages, sendMessage, stop, status } = useChat({
     id: tripId,
@@ -129,6 +189,15 @@ function ChatInner({ tripId }: { tripId: string }) {
   useView({ limit: 30 });
 
   const isStreaming = status === "submitted" || status === "streaming";
+
+  // Send a user message, stamping it with our clientId so every other
+  // collaborator can attribute it to us. The metadata rides on the message
+  // and AI Transport round-trips it to the other clients' message lists.
+  const sendText = (text: string) =>
+    void sendMessage({
+      text,
+      metadata: { senderClientId: selfId } satisfies SenderMetadata,
+    });
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight });
@@ -152,7 +221,7 @@ function ChatInner({ tripId }: { tripId: string }) {
                   key={prompt}
                   type="button"
                   disabled={isStreaming}
-                  onClick={() => void sendMessage({ text: prompt })}
+                  onClick={() => sendText(prompt)}
                   className="rounded-full border border-zinc-200 bg-white px-4 py-2 text-sm text-zinc-700 transition hover:border-zinc-400 hover:bg-zinc-50 disabled:opacity-40 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:border-zinc-500 dark:hover:bg-zinc-800"
                 >
                   {prompt}
@@ -162,7 +231,7 @@ function ChatInner({ tripId }: { tripId: string }) {
           </div>
         )}
         {messages.map((message) => (
-          <MessageBubble key={message.id} message={message} />
+          <MessageBubble key={message.id} message={message} selfId={selfId} />
         ))}
         {status === "submitted" && (
           <p className="px-1 text-xs text-zinc-400 animate-pulse">Thinking…</p>
@@ -175,7 +244,7 @@ function ChatInner({ tripId }: { tripId: string }) {
           const text = input.trim();
           if (!text || isStreaming) return;
           setInput("");
-          void sendMessage({ text });
+          sendText(text);
         }}
       >
         <input
