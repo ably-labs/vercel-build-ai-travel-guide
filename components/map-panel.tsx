@@ -147,7 +147,7 @@ export function MapPanel({ tripId }: { tripId: string }) {
           surrounding itinerary/budget panels don't reflow as the map lifts out
           into the overlay. */}
       {expanded && (
-        <div className="min-h-56 md:min-h-0 lg:row-span-1" aria-hidden />
+        <div className="min-h-72 md:min-h-0 lg:row-span-1" aria-hidden />
       )}
       <section
         ref={sectionRef}
@@ -155,7 +155,7 @@ export function MapPanel({ tripId }: { tripId: string }) {
           "flex min-h-0 flex-col overflow-hidden rounded-xl border border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900 " +
           (expanded
             ? "fixed inset-2 z-50 shadow-2xl sm:inset-4"
-            : "relative min-h-56 md:min-h-0 lg:row-span-1")
+            : "relative min-h-72 md:min-h-0 lg:row-span-1")
         }
       >
         <header className="flex items-center justify-between border-b border-zinc-100 px-4 py-2.5 text-sm font-semibold text-zinc-700 dark:border-zinc-800 dark:text-zinc-200">
