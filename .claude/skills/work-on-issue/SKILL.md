@@ -1,6 +1,6 @@
 ---
 name: work-on-issue
-description: Building block — atomically claim a Wayfarer Jira ticket (under AIT-936) and implement it on the current branch via /goal. Claims by transitioning to In Progress and assigning the operator, then verifies it won the race so parallel workers never double-claim. Used by work-next-ticket; can also be run directly to start one ticket.
+description: Building block — atomically claim a Wayfarer Jira ticket (under AIT-936) and implement it on the current branch (via /goal when run interactively, otherwise directly). Claims by transitioning to In Progress and assigning the operator, then verifies it won the race so parallel workers never double-claim. Used by work-next-ticket; can also be run directly to start one ticket.
 ---
 
 Claim a Wayfarer ticket (under AIT-936) and implement it on the **current branch**. This is a building block: it does not manage worktrees, open PRs, or move the ticket past In Progress — its caller (`work-next-ticket`) owns those. Running it directly implements the ticket but stops short of a PR; use `work-next-ticket` for the full pipeline.
@@ -32,7 +32,7 @@ Claiming must happen **before** any implementation so that parallel workers (and
 
 Transitioning to In Progress also removes the ticket from the "To Do" pool that `epic-todo-tickets` returns, so it disappears from every other worker's candidate list.
 
-### 5. Implement via /goal
+### 5. Implement
 
 Synthesise the summary, description, and comments into a goal string:
 
@@ -44,4 +44,6 @@ Done when: <acceptance criteria, or inferred from description>
 Notes: <relevant comments>
 ```
 
-Invoke the built-in `/goal` skill with that string. `/goal` drives the implementation and commits the work on the current branch. Do not start coding directly, and do not open a PR or change the Jira status here — return control to the caller once `/goal` finishes.
+**`/goal` is a UI-only command — a dispatched/non-interactive subagent cannot invoke it via the Skill tool.** If you are running interactively and `/goal` is available, drive it with that string; it implements and commits on the current branch. Otherwise — the normal case for an `autopilot`-dispatched worker — **do not spin trying to call `/goal` first**: implement the ticket directly on the current branch, following existing codebase patterns and the conventions in `AGENTS.md` (read the relevant `node_modules/next/dist/docs/` guide before touching Next.js code). Use the goal string above purely as your own framing of scope and "done when".
+
+Either way, commit the work on the current branch, but do **not** open a PR or change the Jira status here — return control to the caller once the implementation is committed.

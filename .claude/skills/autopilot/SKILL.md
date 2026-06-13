@@ -19,9 +19,9 @@ Then handle the one case `sync-ticket-status` doesn't — dead workers: for each
 
 ## Phase 2 — Refresh the dependency graph
 
-Infer relationships across the whole open backlog and persist them as Jira links, once per wave, centrally (so the parallel workers don't each redo it or race on link creation). This is the agent's job — never ask a human.
+Infer relationships across the whole open backlog and persist them as Jira links, once per wave, centrally (so the parallel workers don't each redo it or race on link creation). This is the agent's job — derive the judgments yourself by reasoning over ticket content and persist them durably; **never ask a human.**
 
-Follow the inference + idempotent `jiraCreateIssueLink` procedure described in `work-next-ticket` step 2 (extends an API/schema/migration, prose key references, ordered shared surfaces; conservative; `link_type: "Blocks"`, outward = blocker, inward = blocked; skip links that already exist).
+Follow the inference + idempotent `jiraCreateIssueLink` procedure described in `work-next-ticket` step 2 (extends an API/schema/migration, prose key references, ordered shared surfaces; conservative; `link_type: "Blocks"`, outward = blocker, inward = blocked; skip links that already exist). **Heed the link-direction gotcha documented there** — get the direction right the first time (`inward` = blocked, `outward` = blocker), ignore the tool's inverted ✅ confirmation, and verify only via `jiraGetIssue(... additional_fields: ["issuelinks"])` raw JSON, never JQL `linkedIssues(...)`; there is no tool to delete a reversed link.
 
 ## Phase 3 — Dispatch a parallel wave of workers
 
@@ -30,7 +30,7 @@ Compute the **claimable set** — every To Do ticket that passes all of `work-ne
 - If the claimable set is **empty**, do **not** necessarily stop — check what's in flight (see End of wave). If tickets are still In Review awaiting a human merge, this wave does no dispatch but the loop must keep going so Phase 1 catches those merges. Only when nothing is in flight either is the backlog truly drained.
 - Otherwise dispatch up to **4 workers concurrently** (cap — raise only if the machine can take it). For each chosen ticket, launch a **background `Agent` with `isolation: "worktree"`** so each gets its own isolated checkout and they cannot collide. Send all the wave's agents in a **single message** (multiple `Agent` calls) so they run in parallel. Each agent's prompt:
 
-  > You are in a fresh, isolated git worktree. Work Wayfarer ticket `<key>` end to end by invoking the `work-next-ticket` skill with that exact key. It will claim the ticket atomically (skip if already lost), implement via `work-on-issue` + `/goal`, rebase onto `origin/main`, push, open a PR, and move the ticket to In Review. Do not call EnterWorktree — you are already isolated. Report the PR URL, or `lost claim on <key>`, or the blocker if you had to stop.
+  > You are in a fresh, isolated git worktree. Work Wayfarer ticket `<key>` end to end by invoking the `work-next-ticket` skill with that exact key. It will claim the ticket atomically (skip if already lost), implement via `work-on-issue` — which implements directly against existing codebase patterns, since `/goal` is UI-only and not callable by a dispatched worker — then rebase onto `origin/main`, push, open a PR, and move the ticket to In Review. Do not call EnterWorktree — you are already isolated. Report the PR URL, or `lost claim on <key>`, or the blocker if you had to stop.
 
   Duplicate work is prevented at two levels: this wave hands each ticket to exactly one worker, and `work-on-issue`'s atomic claim stops any cross-wave or cross-operator collision.
 

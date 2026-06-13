@@ -20,8 +20,13 @@ Invoke the **`epic-todo-tickets`** skill to fetch AIT-936 tickets in "To Do". If
 Selection depends on knowing which tickets block which. **If you were dispatched by `autopilot`, it has already refreshed the graph for the whole backlog this wave — skip to step 3.** Otherwise refresh it yourself:
 
 - Load `jira` tools, fetch each candidate's `description` and `issuelinks` (`jiraGetIssue` with `fields: ["status","assignee","description","issuelinks"]`), plus the epic's In Progress / In Review / recently-Done tickets they might build on.
-- **The agent infers relationships — never ask a human.** Ticket B depends on A when B needs A's change to build, pass, or make sense (extends an API/schema/migration A introduces, references A's key in prose, or shares a surface where order matters). Be conservative: assert only what the ticket content justifies; when unsure, leave them independent rather than over-serialising.
+- **The agent infers relationships — never ask a human.** Ticket B depends on A when B needs A's change to build, pass, or make sense (extends an API/schema/migration A introduces, references A's key in prose, or shares a surface where order matters). Be conservative: assert only what the ticket content justifies; when unsure, leave them independent rather than over-serialising. Derive the judgment yourself by reasoning over content and persist it durably (as a Jira link) — do not prompt a human for it.
 - Record each genuine, not-yet-linked dependency idempotently via `jiraCreateIssueLink`: `{ "inward_issue": "<B, blocked>", "outward_issue": "<A, blocker>", "link_type": "Blocks", "comment": "Auto-detected: <B> needs <A> merged first — <reason>." }`. With `Blocks`, the outward issue blocks the inward one. Skip if the link already exists.
+
+> **Link-direction gotcha — get it right the first time** (there is no MCP tool to delete a link; a reversed one can only be removed by a human in the Jira UI):
+> - For `link_type: "Blocks"`, params pass straight through to the Jira REST API: `inward_issue` = the **blocked** issue, `outward_issue` = the **blocker**. So "B is blocked by / depends on A" → `{ inward_issue: B, outward_issue: A }`.
+> - **Ignore the tool's ✅ confirmation message** — it renders the direction *inverted*, so a correct link looks reversed in the response. Trust the params you sent, not the echo.
+> - **Verify only via** `jiraGetIssue({ issue_key, additional_fields: ["issuelinks"], include_prs: false })` and read the raw `issuelinks` JSON. **Do NOT** verify with the JQL `linkedIssues(...)` function — its direction argument behaves opposite to the plain-English phrase and gives a false signal.
 
 ### 3. Select the next claimable ticket
 
@@ -43,7 +48,7 @@ You need a dedicated branch named `<key>-<short-slug>` (lowercase, e.g. `ait-941
 
 ### 5. Claim and implement via work-on-issue
 
-Invoke the **`work-on-issue`** skill with `<key>`. It atomically claims the ticket (transition → In Progress + assign, with race verification) and drives `/goal` to implement and commit.
+Invoke the **`work-on-issue`** skill with `<key>`. It atomically claims the ticket (transition → In Progress + assign, with race verification) and implements + commits the work on the current branch — via `/goal` when run interactively, otherwise (the dispatched-worker case) by implementing directly against existing codebase patterns, since `/goal` is UI-only and can't be invoked by a non-interactive subagent.
 
 If `work-on-issue` reports `lost claim on <key>`, another worker beat us: abandon this branch/worktree (no PR), and — if self-selecting (no key passed) — return to step 3 for the next candidate. If a key was passed, just stop; the orchestrator will not redispatch it.
 
