@@ -1,24 +1,15 @@
-import type { UIMessage } from "ai";
+import {
+  getToolName,
+  isReasoningUIPart,
+  isTextUIPart,
+  isToolUIPart,
+  type DynamicToolUIPart,
+  type ToolUIPart,
+  type UIMessage,
+} from "ai";
 
-// A tool-call part of an assistant UI message: either a typed `tool-<name>`
-// part or a `dynamic-tool` part. Both carry the streaming `state` and the
-// arguments assembled so far in `input`.
-interface ToolUIPart {
-  type: string;
-  state?:
-    | "input-streaming"
-    | "input-available"
-    | "approval-requested"
-    | "approval-responded"
-    | "output-available"
-    | "output-error";
-  input?: unknown;
-  toolName?: string;
-}
-
-function isToolPart(part: { type: string }): boolean {
-  return part.type === "dynamic-tool" || part.type.startsWith("tool-");
-}
+type AnyToolUIPart = ToolUIPart | DynamicToolUIPart;
+type UIPart = UIMessage["parts"][number];
 
 // A tool call is only safe to replay to the model once it has produced a
 // result. A part still in "input-streaming" or "input-available" (or awaiting
@@ -26,7 +17,7 @@ function isToolPart(part: { type: string }): boolean {
 // user hit Stop, the request aborted, or the serverless function timed out) and
 // was then persisted to the channel. It has no matching tool result, which
 // Anthropic rejects, so it must not reach the model.
-function isCompleteToolPart(part: ToolUIPart): boolean {
+function isCompleteToolPart(part: AnyToolUIPart): boolean {
   return part.state === "output-available" || part.state === "output-error";
 }
 
@@ -43,16 +34,16 @@ function isCompleteToolPart(part: ToolUIPart): boolean {
 // on the trip 400s the same way until the gap is filled. Restoring `{}` keeps
 // the real prior call (its arguments genuinely were empty) instead of dropping
 // it (AIT-992).
-function hasUsableInput(part: ToolUIPart): boolean {
+function hasUsableInput(part: AnyToolUIPart): boolean {
   return typeof part.input === "object" && part.input !== null;
 }
 
 // Whether an (already tool-filtered) assistant part still carries something the
 // model can use, so we can drop messages left empty after stripping a call.
-function isUsablePart(part: { type: string; text?: string }): boolean {
-  if (part.type === "text") return Boolean(part.text && part.text.trim());
-  if (part.type === "reasoning") return true;
-  return isToolPart(part); // only complete tool parts survive the strip above
+function isUsablePart(part: UIPart): boolean {
+  if (isTextUIPart(part)) return Boolean(part.text && part.text.trim());
+  if (isReasoningUIPart(part)) return true;
+  return isToolUIPart(part); // only complete tool parts survive the strip above
 }
 
 /** A tool call that was dropped from the conversation, for diagnostics. */
@@ -104,42 +95,39 @@ export function sanitizeConversation(
 
   const cleaned = messages.map((message, messageIndex) => {
     if (message.role !== "assistant") return message;
-    const parts = (message.parts as unknown as ToolUIPart[])
+    const parts = message.parts
       .filter((part) => {
-        if (!isToolPart(part) || isCompleteToolPart(part)) return true;
+        if (!isToolUIPart(part) || isCompleteToolPart(part)) return true;
         dropped.push({
           messageIndex,
           messageId: message.id,
           type: part.type,
           state: part.state,
-          toolName: part.toolName,
+          toolName: getToolName(part),
         });
         return false;
       })
       .map((part) => {
         // Every surviving tool part is complete; ensure it carries an `input`
         // object so the reconstructed `tool_use` block is well-formed.
-        if (!isToolPart(part) || hasUsableInput(part)) return part;
+        if (!isToolUIPart(part) || hasUsableInput(part)) return part;
         repaired.push({
           messageIndex,
           messageId: message.id,
           type: part.type,
           state: part.state,
-          toolName: part.toolName,
+          toolName: getToolName(part),
         });
         return { ...part, input: {} };
       });
-    return { ...message, parts: parts as unknown as UIMessage["parts"] };
+    return { ...message, parts };
   });
 
   // A message whose only content was the interrupted call is now empty; drop it
   // so we never send a contentless assistant turn.
   const kept = cleaned.filter(
     (message) =>
-      message.role !== "assistant" ||
-      (message.parts as unknown as { type: string; text?: string }[]).some(
-        isUsablePart,
-      ),
+      message.role !== "assistant" || message.parts.some(isUsablePart),
   );
 
   return { messages: kept, dropped, repaired };
