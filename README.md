@@ -2,52 +2,135 @@
 
 An AI travel planning canvas. Chat directs the AI; the canvas is where it works.
 
-Unlike a chatbot that returns a wall of text, Wayfarer gives the AI a shared visual
-workspace. When you ask it to plan a trip, it places pins on a map, drops cards into a
-day-by-day board, and updates a running budget — live, in front of you. The chat panel
-is one input method, not the product.
+Unlike a chatbot that returns a wall of text, Wayfarer gives the AI a shared visual workspace. Ask it to plan a trip and it places pins on a map, drops cards into a day-by-day board, and updates a running budget, live, in front of you. The chat panel is one input method, not the product.
 
-The product is built on three Ably realtime products working together:
+Wayfarer is a demo of [Ably AI Transport](https://ably.com/docs/ai-transport). It is a standard [Vercel AI SDK](https://ai-sdk.dev) `useChat` app, except the chat session runs on Ably instead of a single HTTP connection. That one change makes the AI stream resumable, shared across tabs and devices, and live for everyone planning the trip, with no database.
 
-- **Ably AI Transport** powers the AI chat as a durable session — close the tab, switch
-  devices, come back tomorrow, and the conversation resumes exactly where it left off.
-- **Ably LiveObjects** holds the itinerary and budget as shared, conflict-free state that
-  the AI and every collaborator write to simultaneously.
-- **Ably Pub/Sub** delivers the live, ephemeral events — map pins appearing, collaborator
-  presence — to every connected browser in realtime.
+**[Try it live](https://vercel-build-ai-travel-guide.vercel.app/)** - plan a trip, then open the same link in a second tab or on your phone and watch it stay in sync.
 
-## Documents
+## What it demonstrates
 
-Read these in order before starting:
+- **Resumable streaming.** Refresh mid-plan and the response picks up where it stopped. The model never re-runs.
+- **Multi-user conversations.** Everyone with the trip link shares one conversation. Anyone can send a prompt to the same agent, and the reply and the plan it builds update for the whole group rather than for one person. It is a chat with more than one human in it, not a private session each.
+- **Multi-tab and multi-device continuity.** Open the trip on a laptop and a phone and both follow the same live response, then settle on the same history.
+- **A shared, subscribable canvas.** The map, day board, and budget are the source of truth, not the chat transcript. The AI writes them through tools, and every viewer's canvas updates per edit, live.
+- **Presence.** Avatars show who is planning the trip with you, one per person regardless of how many tabs they have open.
+- **Cancellation.** The Stop button is a real signal the agent receives, not just a closed socket.
 
-1. [`REQUIREMENTS.md`](./REQUIREMENTS.md) — the product vision, goals, personas, and
-   feature requirements. This is the *what* and *why*.
-2. [`DELIVERY_PLAN.md`](./DELIVERY_PLAN.md) — the incremental milestone plan. This is the
-   order to build in, with a clear "done when" gate per milestone.
-3. [`ABLY_INTEGRATION.md`](./ABLY_INTEGRATION.md) — the role each Ably product plays, the
-   conceptual data/channel model, and the non-obvious setup steps you must not skip.
+All of it runs on one trip session: a small set of Ably channels that share the `trip:<id>:` prefix.
 
-## Stack at a glance
+## How Ably is used
 
-| Layer | Choice |
-| --- | --- |
-| Framework | Next.js (App Router) |
-| Hosting | Vercel |
-| AI orchestration | Vercel AI SDK |
-| Model | Anthropic Claude (current Sonnet) via the Anthropic provider |
-| AI session transport | Ably AI Transport (`@ably/ai-transport`) |
-| Shared state | Ably LiveObjects (via the `ably` JS SDK plugin) |
-| Realtime events | Ably Pub/Sub (`ably`) |
-| Map | Mapbox GL JS or MapLibre GL |
-| Styling | Tailwind CSS |
+Everything for a trip runs on a small set of Ably channels that share the `trip:<id>:` prefix, one per capability. The session is the source of truth that every client and the agent derive from.
 
-## A deliberate stack note
+| Layer | Ably product | Channel | What it delivers in Wayfarer |
+|---|---|---|---|
+| Transport | AI Transport over Pub/Sub | `trip:<id>:session` | Resumable streaming, multi-user conversations, multi-tab and multi-device continuity, cancellation, history with no database |
+| Shared state | LiveObjects (`LiveMap` + `LiveCounter`) | `trip:<id>:state` | The map, day board, and budget as live, subscribable state that every viewer sees update per edit |
+| Presence | Presence | `trip:<id>:presence` | Avatars of who is in the trip, one per person |
+| Ephemeral events | Pub/Sub | `trip:<id>:pins` | A fire-and-forget map-pin drop animation (the durable pin data lives in LiveObjects) |
 
-State lives in Ably LiveObjects, not a separate database. For the scope of this project we
-do **not** need Supabase or another persistence layer — the itinerary and budget are held in
-LiveObjects, and the conversation history is held by AI Transport. Don't add a database
-unless a milestone explicitly calls for one.
+### The transport swap (client)
 
-Trips are reached via a shareable link containing a trip ID. Authentication is out of scope
-for the core build (see non-goals in `REQUIREMENTS.md`); treat any visitor with the link as a
-collaborator on that trip.
+The client is a normal `useChat`, but the transport is Ably AI Transport. Two extra hooks connect the durable session to the hook's local state.
+
+```tsx
+// components/chat-panel.tsx
+const { chatTransport } = useChatTransport();
+
+const { messages, setMessages, sendMessage, stop, status } = useChat({
+  id: tripId,
+  transport: chatTransport, // Ably AI Transport, in place of the default HTTP transport
+});
+
+useMessageSync({ setMessages }); // sync session history, other participants, and resumed streams into useChat
+useView({ limit: 30 });          // load recent history on mount
+```
+
+Because the session is shared, every participant's `sendMessage` publishes onto the same `trip:<id>:session` channel, and `useMessageSync` folds everyone's messages (and any resumed stream) into each client's view. That is what makes the conversation multi-user rather than one private chat per person.
+
+### Streaming over the session (server)
+
+The agent route does not stream down the HTTP response body. It opens the session, runs the model, and pipes the Vercel UIMessage stream back onto the session. The request returns immediately; the run keeps streaming in the background. History is rebuilt from the session, so there is no database.
+
+```ts
+// app/api/chat/route.ts
+const session = createAgentSession({ client: ably, channelName: invocation.sessionName });
+await session.connect();
+
+const run = session.createRun(invocation, { signal: req.signal });
+await run.start();
+const messages = await run.loadConversation(); // rebuilt from the session, no database
+
+const result = streamText({ model: anthropic("claude-sonnet-4-6"), system, messages, tools });
+
+after(async () => {
+  const { reason } = await run.pipe(result.toUIMessageStream());
+  await run.end(reason);
+});
+return new Response(null, { status: 200 });
+```
+
+The agent's tools (`add_destination`, `add_day`, `add_stop`, `update_stop`, `move_stop`, `suggest_landmark`, and so on) write the plan into LiveObjects through a server-side `TripStateWriter`. Edits are conflict-free batch operations, and the budget `LiveCounter` reconciles to the sum of priced stops after every change, so retries and re-planning can never inflate it.
+
+### Shared canvas and presence (client)
+
+Every browser subscribes to the trip's LiveObjects state and re-renders on each change, and renders the presence set as avatars.
+
+```ts
+// components/use-trip-state.ts - the canvas is a live projection of LiveObjects state
+const root = await channel.object.get();
+setState(root.compactJson() ?? {});
+root.subscribe(() => setState(root.compactJson() ?? {}));
+```
+
+The browser authenticates to Ably through a token endpoint (`app/api/ably/token`), which issues short-lived token requests carrying the visitor's `clientId` and scoped to the `trip:*` namespace. The Ably API key never reaches the client.
+
+## Running it locally
+
+### Prerequisites
+
+- Node 20+ and [pnpm](https://pnpm.io)
+- An [Ably account](https://ably.com/sign-up) and an API key (the free tier is plenty)
+- An [Anthropic API key](https://console.anthropic.com)
+
+### 1. Configure the Ably channel namespace
+
+AI Transport needs mutable messages and persistence on the channels it uses. In the Ably dashboard, add a channel rule for the `trip` namespace (namespace `trip`, matching `trip:*`) with:
+
+- **Message annotations, updates, deletes, and appends** enabled (this is what lets a streamed reply be appended to a single message).
+- **Persisted messages** enabled (so a client that reloads or joins late can rebuild the conversation from history).
+
+### 2. Set environment variables
+
+Create a `.env.local` in the project root:
+
+```bash
+ABLY_API_KEY=your-ably-api-key
+ANTHROPIC_API_KEY=your-anthropic-api-key
+```
+
+Both are server-only. The browser never sees the Ably key; it uses the token endpoint instead.
+
+### 3. Install and run
+
+```bash
+pnpm install
+pnpm dev
+```
+
+Open http://localhost:3000, pick a seed prompt (or type your own), and watch the canvas fill in. Open the trip URL in a second tab or on your phone to see the session stay in sync.
+
+## Tech stack
+
+- **Next.js 16** (App Router) and **React 19**
+- **Vercel AI SDK** (`ai`, `@ai-sdk/react`) with **`@ai-sdk/anthropic`** running **Claude Sonnet 4.6** (swappable)
+- **Ably**: [`@ably/ai-transport`](https://github.com/ably/ably-ai-transport-js), [`ably`](https://github.com/ably/ably-js) (with the LiveObjects plugin)
+- **MapLibre GL**, **Tailwind CSS 4**, **Zod**, **TypeScript**
+
+## Learn more
+
+- [Try the live demo](https://vercel-build-ai-travel-guide.vercel.app/)
+- [Ably AI Transport docs](https://ably.com/docs/ai-transport)
+- [Introducing AI Transport v0.2.0](https://ably.com/blog/introducing-ai-transport-v0-2-0) - durable sessions, runs, and branching
+- [The `@ably/ai-transport` SDK](https://github.com/ably/ably-ai-transport-js)
