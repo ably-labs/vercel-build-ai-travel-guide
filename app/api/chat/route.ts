@@ -7,6 +7,7 @@ import { after } from "next/server";
 import { z } from "zod";
 
 import { pinsChannelName, tripIdFromSessionChannel } from "@/lib/channels";
+import { sanitizeConversation } from "@/lib/sanitize-conversation";
 import { MAX_ITINERARY_ITEMS, type Destination } from "@/lib/trip-state";
 import { TripStateWriter } from "@/lib/trip-state-server";
 
@@ -346,7 +347,27 @@ export async function POST(req: Request) {
 
   // Full multi-turn history, reconstructed from the channel — the channel is
   // the conversation record; there is no database.
-  const messages = await run.loadConversation();
+  const rawMessages = await run.loadConversation();
+  // The reconstructed history can carry malformed tool calls that Anthropic
+  // rejects with `messages.<n>.content.0.tool_use.input: Field required`: a
+  // turn interrupted mid-call leaves a half-formed call with no result, and a
+  // completed call whose arguments were `{}` rehydrates with its `input` field
+  // absent. Either kind, once in durable history, fails every later turn on the
+  // trip. Strip the interrupted ones and backfill the missing `{}` before the
+  // conversation reaches the model.
+  const { messages, dropped, repaired } = sanitizeConversation(rawMessages);
+  if (dropped.length > 0) {
+    console.warn(
+      `[chat] Stripped ${dropped.length} interrupted tool call(s) from the reconstructed conversation before sending to the model:`,
+      dropped,
+    );
+  }
+  if (repaired.length > 0) {
+    console.warn(
+      `[chat] Backfilled empty input on ${repaired.length} reconstructed tool call(s) missing it before sending to the model:`,
+      repaired,
+    );
+  }
 
   const writer = new TripStateWriter(tripId, ablyApiKey);
   await writer.ensureInitialized();
@@ -377,6 +398,15 @@ export async function POST(req: Request) {
       await run.end(reason);
     } catch (error) {
       console.error("AI run failed:", error);
+      // Node's console truncates nested objects to `[Object]` at depth 2, which
+      // hides the offending message inside an Anthropic 400
+      // ("...tool_use.input: Field required"). Dump the exact request payload,
+      // fully expanded, so any bad content block is readable.
+      const body =
+        error && typeof error === "object" && "requestBodyValues" in error
+          ? (error as { requestBodyValues?: unknown }).requestBodyValues
+          : undefined;
+      if (body) console.dir(body, { depth: null });
       await run.end("error").catch(() => {});
     } finally {
       session.close();
