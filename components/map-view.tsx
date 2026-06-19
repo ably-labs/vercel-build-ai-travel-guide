@@ -36,16 +36,18 @@ const MAP_STYLE: maplibregl.StyleSpecification = {
 const ROUTE_SOURCE = "wayfarer-route";
 
 // One colour per day, cycled, used for both the stop badges and the route
-// legs of that day.
+// legs of that day. Drawn from the Ably secondary palette (the brand's
+// designated colour-coding / data-visualisation set), led by Ably Orange so
+// day one carries the signature brand colour. See https://brand.ably.com/#colours.
 const DAY_COLORS = [
-  "#e11d48",
-  "#2563eb",
-  "#059669",
-  "#d97706",
-  "#7c3aed",
-  "#0891b2",
-  "#db2777",
-  "#65a30d",
+  "#ff5416", // Orange 600 (signature)
+  "#00a5ec", // Blue 600
+  "#008e06", // Green 700
+  "#f8c100", // Yellow 500
+  "#7a1bf2", // Violet 500
+  "#0284cd", // Blue 700
+  "#d400ab", // Pink 600
+  "#00c008", // Green 600
 ];
 
 function dayColor(dayIndex: number): string {
@@ -255,7 +257,7 @@ export function MapView({ tripId }: { tripId: string }) {
         source: ROUTE_SOURCE,
         filter: ["==", ["get", "leg"], "transfer"],
         paint: {
-          "line-color": "#94a3b8",
+          "line-color": "#a7b1be", // Ably Neutral 600
           "line-width": 1.5,
           "line-dasharray": [1.5, 2],
         },

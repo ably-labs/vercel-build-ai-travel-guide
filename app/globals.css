@@ -1,8 +1,80 @@
 @import "tailwindcss";
 
+/* ── Ably brand palette ────────────────────────────────────────────────────
+   The single source of truth for the app's colours, taken from the official
+   palette at https://brand.ably.com/#colours. Defined once here as Tailwind
+   theme tokens (`@theme`), so a brand tweak is a one-line edit rather than a
+   hunt-and-replace across components.
+
+   The app's components are written against Tailwind's stock palette names
+   (zinc/teal/sky/emerald/amber/red). Rather than churn every className, we
+   remap those scales onto Ably's palette below, so every existing utility
+   (`bg-zinc-900`, `text-teal-100`, …) now renders an on-brand colour:
+
+     zinc    → Ably Neutral   (the UI workhorse — surfaces, borders, text)
+     teal    → Ably Orange    (the AI/chat brand-accent surface)
+     sky     → Ably Blue      (GUI interactive: selected/active states)
+     emerald → Ably Green     (success / connected)
+     amber   → Ably Yellow    (warning / connecting)
+     red     → Ably Orange-red (error / offline)
+
+   Orange is a signal, not a fill: per the brand guidance neutrals carry the
+   surfaces and orange marks the one AI surface and primary actions. Scale
+   values are kept perceptually close to the originals so contrast (WCAG AA)
+   is preserved in both light and dark mode. */
+@theme {
+  /* Ably Neutral scale (maps to Tailwind `zinc-*`). */
+  --color-zinc-50: #f6f8fa; /* Neutral 100 */
+  --color-zinc-100: #eef1f6; /* Neutral 200 */
+  --color-zinc-200: #e6eaf0; /* Neutral 300 */
+  --color-zinc-300: #d9dde4; /* Neutral 400 */
+  --color-zinc-400: #a7b1be; /* Neutral 600 */
+  --color-zinc-500: #687288; /* Neutral 800 */
+  --color-zinc-600: #575d71; /* Neutral 900 */
+  --color-zinc-700: #3f4555; /* Neutral 1000 */
+  --color-zinc-800: #2c3344; /* Neutral 1100 */
+  --color-zinc-900: #141924; /* Neutral 1200 */
+  --color-zinc-950: #03020d; /* Neutral 1300 / Primary Black */
+
+  /* Ably Orange scale (maps to Tailwind `teal-*` — the chat/AI accent). */
+  --color-teal-50: #fff5f1; /* Orange 100 */
+  --color-teal-100: #ffe3d8; /* Orange 200 */
+  --color-teal-200: #ffc4ae; /* Orange 300 */
+  --color-teal-300: #ff9c79; /* Orange 400 */
+  --color-teal-400: #ff723f; /* Orange 500 */
+  --color-teal-500: #ff5416; /* Orange 600 ★ signature */
+  --color-teal-700: #b82202; /* Orange 900 */
+  --color-teal-800: #751500; /* Orange 1000 */
+  --color-teal-900: #2a0b00; /* Orange 1100 */
+  --color-teal-950: #1a0700; /* darker than Orange 1100 for deep surfaces */
+
+  /* Ably Blue scale (maps to Tailwind `sky-*` — GUI interactive states). */
+  --color-sky-50: #f1fbff; /* Blue 100 */
+  --color-sky-300: #80d9ff; /* Blue 300 */
+  --color-sky-400: #4ad4ff; /* Blue 400 ★ */
+  --color-sky-500: #00a5ec; /* Blue 600 */
+  --color-sky-700: #0284cd; /* Blue 700 */
+  --color-sky-950: #001b2a; /* Blue 900 */
+
+  /* Ably Green / Yellow / error-red for functional status indicators. */
+  --color-emerald-500: #11cb24; /* GUI Success */
+  --color-amber-400: #ffd43d; /* Yellow 400 ★ */
+  --color-amber-500: #f8c100; /* Yellow 500 */
+  --color-red-500: #ff2739; /* Orange 700 (brand red) */
+  --color-red-600: #e40000; /* Orange 800 */
+
+  /* Named brand tokens, available as `bg-ably-orange`, `text-ably-black`, etc.,
+     for any new on-brand UI that wants to reference colours by intent. */
+  --color-ably-orange: #ff5416;
+  --color-ably-orange-hover: #ff723f;
+  --color-ably-black: #03020d;
+  --color-ably-white: #ffffff;
+  --color-ably-blue: #006edc; /* GUI Blue default — links / primary buttons */
+}
+
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: #ffffff; /* Ably Primary White */
+  --foreground: #03020d; /* Ably Primary Black */
 }
 
 @theme inline {
@@ -14,8 +86,8 @@
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+    --background: #03020d; /* Ably Primary Black */
+    --foreground: #eef1f6; /* Ably Neutral 200 */
   }
 }
 
@@ -37,7 +109,7 @@ body {
   height: 14px;
   flex-shrink: 0;
   border-radius: 9999px;
-  background: #e11d48;
+  background: #ff5416; /* Ably Orange — the trip's anchor cities */
   border: 2px solid #ffffff;
   box-shadow: 0 1px 4px rgb(0 0 0 / 0.4);
 }
@@ -49,7 +121,7 @@ body {
   padding: 1px 7px;
   font-size: 11px;
   font-weight: 600;
-  color: #18181b;
+  color: #141924; /* Ably Neutral 1200 */
   box-shadow: 0 1px 3px rgb(0 0 0 / 0.25);
 }
 
@@ -97,7 +169,7 @@ body {
   flex-shrink: 0;
   border-radius: 9999px 9999px 9999px 0;
   transform: rotate(-45deg);
-  background: #7c3aed;
+  background: #7a1bf2; /* Ably Violet 500 — optional landmark ideas */
   border: 2px solid #ffffff;
   box-shadow: 0 1px 4px rgb(0 0 0 / 0.4);
 }
@@ -109,7 +181,7 @@ body {
   padding: 1px 6px;
   font-size: 10px;
   font-weight: 600;
-  color: #4c1d95;
+  color: #460894; /* Ably Violet 700 */
   box-shadow: 0 1px 3px rgb(0 0 0 / 0.2);
 }
 
@@ -159,7 +231,7 @@ body {
   flex-direction: column;
   gap: 4px;
   font-family: var(--font-geist-sans, Arial, sans-serif);
-  color: #18181b;
+  color: #141924; /* Ably Neutral 1200 */
 }
 
 .wayfarer-card-title {
@@ -176,7 +248,7 @@ body {
   display: flex;
   gap: 6px;
   font-size: 12px;
-  color: #3f3f46;
+  color: #3f4555; /* Ably Neutral 1000 */
 }
 
 .wayfarer-card-label {
@@ -186,14 +258,14 @@ body {
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.04em;
-  color: #a1a1aa;
+  color: #a7b1be; /* Ably Neutral 600 */
   line-height: 1.6;
 }
 
 @keyframes wayfarer-budget-pop {
   0% {
     transform: scale(1.18);
-    color: #059669;
+    color: #008e06; /* Ably Green 700 */
   }
   100% {
     transform: scale(1);
@@ -224,7 +296,7 @@ body {
 .wayfarer-budget-bar-fill {
   height: 100%;
   border-radius: 9999px;
-  background: #059669;
+  background: #008e06; /* Ably Green 700 */
   transition: width 0.6s cubic-bezier(0.2, 0.8, 0.3, 1);
 }
 

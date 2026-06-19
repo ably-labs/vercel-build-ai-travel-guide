@@ -44,15 +44,18 @@ const TRAVELLERS = [
   "Pilgrim",
 ];
 
+// Per-collaborator avatar colours from the Ably secondary palette (the brand's
+// colour-coding set). Each is dark enough to carry the white initials at AA
+// contrast. See https://brand.ably.com/#colours.
 const COLORS = [
-  "#0ea5e9", // sky
-  "#10b981", // emerald
-  "#f59e0b", // amber
-  "#8b5cf6", // violet
-  "#ef4444", // red
-  "#14b8a6", // teal
-  "#ec4899", // pink
-  "#6366f1", // indigo
+  "#ff5416", // Ably Orange 600
+  "#00a5ec", // Ably Blue 600
+  "#008e06", // Ably Green 700
+  "#7a1bf2", // Ably Violet 500
+  "#d400ab", // Ably Pink 600
+  "#0284cd", // Ably Blue 700
+  "#5f0bc9", // Ably Violet 600
+  "#b82202", // Ably Orange 900
 ];
 
 function hashOf(value: string): number {
