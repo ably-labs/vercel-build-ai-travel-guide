@@ -17,18 +17,19 @@ Wayfarer is a demo of [Ably AI Transport](https://ably.com/docs/ai-transport). I
 - **Presence.** Avatars show who is planning the trip with you, one per person regardless of how many tabs they have open.
 - **Cancellation.** The Stop button is a real signal the agent receives, not just a closed socket.
 
-All of it runs on one trip session: a small set of Ably channels that share the `trip:<id>:` prefix.
+All of it runs on one durable session: a single Ably channel per trip, `trip:<id>:session`.
 
 ## How Ably is used
 
-Everything for a trip runs on a small set of Ably channels that share the `trip:<id>:` prefix, one per capability. The session is the source of truth that every client and the agent derive from.
+Everything for a trip runs on **one** Ably channel, `trip:<id>:session`. That single channel is the whole durable session: the AI Transport chat stream, the LiveObjects canvas state, and presence all ride it together. It is the source of truth that every client and the agent derive from.
 
-| Layer | Ably product | Channel | What it delivers in Wayfarer |
-|---|---|---|---|
-| Transport | AI Transport over Pub/Sub | `trip:<id>:session` | Resumable streaming, multi-user conversations, multi-tab and multi-device continuity, cancellation, history with no database |
-| Shared state | LiveObjects (`LiveMap` + `LiveCounter`) | `trip:<id>:state` | The map, day board, and budget as live, subscribable state that every viewer sees update per edit |
-| Presence | Presence | `trip:<id>:presence` | Avatars of who is in the trip, one per person |
-| Ephemeral events | Pub/Sub | `trip:<id>:pins` | A fire-and-forget map-pin drop animation (the durable pin data lives in LiveObjects) |
+| Layer | Ably product | What it delivers in Wayfarer |
+|---|---|---|
+| Transport | AI Transport over Pub/Sub | Resumable streaming, multi-user conversations, multi-tab and multi-device continuity, cancellation, history with no database |
+| Shared state | LiveObjects (`LiveMap` + `LiveCounter`) | The map, day board, and budget as live, subscribable state that every viewer sees update per edit |
+| Presence | Presence | Avatars of who is in the trip, one per person |
+
+One channel carries all three because LiveObjects, presence, and the AI Transport conversation can share it. The AI Transport SDK attaches the channel with the LiveObjects object modes (`channelModes: OBJECT_MODES`) unioned with the modes it always needs — and presence and pub/sub are already in that default set — so a single attach grants everything. The map's pin-drop animation is driven by changes to the LiveObjects destination set rather than a separate ephemeral channel: the durable destination data and the animation cue are the same write.
 
 ### The transport swap (client)
 
@@ -55,7 +56,12 @@ The agent route does not stream down the HTTP response body. It opens the sessio
 
 ```ts
 // app/api/chat/route.ts
-const session = createAgentSession({ client: ably, channelName: invocation.sessionName });
+// channelModes: OBJECT_MODES attaches the same session channel for LiveObjects too.
+const session = createAgentSession({
+  client: ably,
+  channelName: invocation.sessionName,
+  channelModes: OBJECT_MODES,
+});
 await session.connect();
 
 const run = session.createRun(invocation, { signal: req.signal });
@@ -66,25 +72,26 @@ const result = streamText({ model: anthropic("claude-sonnet-4-6"), system, messa
 
 after(async () => {
   const { reason } = await run.pipe(result.toUIMessageStream());
-  await run.end(reason);
+  await run.end({ reason });
 });
 return new Response(null, { status: 200 });
 ```
 
-The agent's tools (`add_destination`, `add_day`, `add_stop`, `update_stop`, `move_stop`, `suggest_landmark`, and so on) write the plan into LiveObjects through a server-side `TripStateWriter`. Edits are conflict-free batch operations, and the budget `LiveCounter` reconciles to the sum of priced stops after every change, so retries and re-planning can never inflate it.
+The agent's tools (`add_destination`, `add_day`, `add_stop`, `update_stop`, `move_stop`, `suggest_landmark`, and so on) write the plan into the same channel's LiveObjects through a server-side `TripStateWriter`. Edits are conflict-free batch operations, and the budget `LiveCounter` reconciles to the sum of priced stops after every change, so retries and re-planning can never inflate it.
 
 ### Shared canvas and presence (client)
 
-Every browser subscribes to the trip's LiveObjects state and re-renders on each change, and renders the presence set as avatars.
+The chat, the canvas, and presence share one `ClientSession` — opened once by a single `ChatTransportProvider` over `trip:<id>:session`. The chat reads it via `useChatTransport`; the canvas and presence read the same session by channel name via `useClientSession`, off its `object` and `presence` accessors. Every browser subscribes to the session's LiveObjects state and re-renders on each change, and renders the presence set as avatars.
 
 ```ts
-// components/use-trip-state.ts - the canvas is a live projection of LiveObjects state
-const root = await channel.object.get();
+// components/use-trip-state.ts - the canvas is a live projection of the session's LiveObjects state
+const { session } = useClientSession({ channelName: sessionChannelName(tripId) });
+const root = await session.object.get();
 setState(root.compactJson() ?? {});
 root.subscribe(() => setState(root.compactJson() ?? {}));
 ```
 
-The browser authenticates to Ably through a token endpoint (`app/api/ably/token`), which issues short-lived token requests carrying the visitor's `clientId` and scoped to the `trip:*` namespace. The Ably API key never reaches the client.
+The browser authenticates to Ably through a token endpoint (`app/api/ably/token`), which issues short-lived token requests carrying the visitor's `clientId` and scoped to the `trip:*` namespace (with the object capabilities LiveObjects needs on that channel). The Ably API key never reaches the client.
 
 ## Running it locally
 

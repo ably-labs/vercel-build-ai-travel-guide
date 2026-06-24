@@ -1,6 +1,5 @@
 "use client";
 
-import { useAbly } from "ably/react";
 import type { Feature, FeatureCollection } from "geojson";
 import maplibregl from "maplibre-gl";
 import { useCallback, useEffect, useRef } from "react";
@@ -9,7 +8,6 @@ import "maplibre-gl/dist/maplibre-gl.css";
 
 import { useSelectedStop } from "@/components/selected-stop";
 import { useTripState } from "@/components/use-trip-state";
-import { pinsChannelName } from "@/lib/channels";
 import {
   LANDMARK_MIN_ZOOM,
   placedStops,
@@ -196,9 +194,9 @@ function routeFeatures(placed: PlacedStop[]): FeatureCollection {
 }
 
 // Destinations, itinerary stops, and the route between them on a world map.
-// Everything durable renders from LiveObjects state (so reload restores it);
-// the trip's pins Pub/Sub channel carries the ephemeral placement events that
-// drop destination pins in with an animation the moment the AI adds them.
+// Everything renders from the trip's LiveObjects state, so a reload restores
+// it and the pin-drop animation rides the same state changes (see the
+// destination sync below).
 //
 // The map's center/zoom live in the MapLibre instance, which stays mounted
 // while the surrounding panel animates between its grid cell and a
@@ -206,7 +204,6 @@ function routeFeatures(placed: PlacedStop[]): FeatureCollection {
 // expand / collapse for free. A ResizeObserver keeps the map's internal
 // viewport in lockstep with its container as that box animates.
 export function MapView({ tripId }: { tripId: string }) {
-  const ably = useAbly();
   const state = useTripState(tripId);
   const { selectedStopId, selectNonce, selectStop } = useSelectedStop();
   // Latest selectStop, read inside marker click handlers so we can attach them
@@ -350,7 +347,10 @@ export function MapView({ tripId }: { tripId: string }) {
     [fitToPins],
   );
 
-  // Sync markers with the durable destination set in LiveObjects.
+  // Sync markers with the destination set in LiveObjects. Destinations in the
+  // first snapshot restore in place; ones that arrive later animate in
+  // (restoredRef gates this). addPin no-ops on an existing marker, so a
+  // re-delivered snapshot never re-animates a pin.
   useEffect(() => {
     if (!state) return;
     const destinations = state.destinations ?? {};
@@ -492,21 +492,6 @@ export function MapView({ tripId }: { tripId: string }) {
       landmarkMarkers.set(landmark.id, { marker, json });
     });
   }, [state]);
-
-  // Drop pins the instant the AI announces them, ahead of (and deduped
-  // against) the LiveObjects state sync.
-  useEffect(() => {
-    const channel = ably.channels.get(pinsChannelName(tripId));
-    const onPin = (message: { data?: unknown }) => {
-      if (isDestination(message.data)) {
-        addPin(message.data, true);
-      }
-    };
-    channel.subscribe("pin", onPin);
-    return () => {
-      channel.unsubscribe("pin", onPin);
-    };
-  }, [ably, tripId, addPin]);
 
   const empty =
     Object.keys(state?.destinations ?? {}).length === 0 &&

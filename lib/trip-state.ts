@@ -1,6 +1,6 @@
 // The shape of a trip's canvas state, as seen through the LiveObjects
-// compact-JSON view. The durable source of truth lives on the
-// trip:{tripId}:state channel:
+// compact-JSON view. The durable source of truth lives in the LiveObjects on
+// the trip's single session channel (trip:{tripId}:session):
 //
 //   root (map)
 //   ├── meta            JSON { title, summary }

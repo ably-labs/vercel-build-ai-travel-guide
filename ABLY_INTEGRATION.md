@@ -15,7 +15,7 @@ implementation.
 | Package | Version | Purpose |
 | --- | --- | --- |
 | `ably` | 2.21.0 (or latest 2.x) | Core JS SDK: connection, Pub/Sub, and the LiveObjects plugin |
-| `@ably/ai-transport` | 0.1.0 (or latest) | Durable AI session transport; includes a Vercel AI SDK integration |
+| `@ably/ai-transport` | 0.3.0 (or latest) | Durable AI session transport; includes a Vercel AI SDK integration. Exposes the `channelModes` session option (pass `OBJECT_MODES`) plus the session's `object` and `presence` accessors, so LiveObjects and presence can share the AI Transport channel |
 | Vercel AI SDK | latest | LLM orchestration on the server route |
 | Anthropic provider | latest | Claude model access via the Vercel AI SDK |
 
@@ -44,9 +44,10 @@ These are the steps that don't fail loudly. Get them right up front.
    not hold the Ably API key. Issue short-lived tokens from a server endpoint. The token must
    carry a `clientId` so presence and message authorship work and cannot be spoofed client-side.
 
-3. **Grant the right capabilities.** Session and state channels need `publish`, `subscribe`,
-   and `history` (history is what makes session and canvas replay work on reload). LiveObjects
-   channels additionally need the object capabilities.
+3. **Grant the right capabilities.** The single session channel needs `publish`, `subscribe`,
+   `presence`, and `history` (history is what makes session and canvas replay work on reload),
+   plus the `object-publish` / `object-subscribe` capabilities LiveObjects needs. Scoping a
+   token to the whole `trip:*` namespace with all of these covers the one channel per trip.
 
 4. **Keep the API key server-side only.** All key usage stays on the server (the token endpoint
    and the AI route). The browser only ever uses issued tokens.
@@ -59,8 +60,13 @@ These are the steps that don't fail loudly. Get them right up front.
 
 ## Conceptual model
 
-Everything is scoped to a single trip, identified by a `tripId` that appears in the URL. All
-channels and state for that trip are namespaced by it. A clean convention is `trip:{tripId}:*`.
+Everything is scoped to a single trip, identified by a `tripId` that appears in the URL, and
+runs on **one** channel for that trip: `trip:{tripId}:session`. That single durable session
+carries the AI Transport conversation, the LiveObjects canvas state, and presence together.
+This is deliberate — the whole point is one durable session per trip, not a channel per
+capability. It works because the AI Transport SDK attaches the channel with the LiveObjects
+object modes (`channelModes: OBJECT_MODES`) unioned with the modes it always needs, and
+presence and pub/sub are already in that default set, so one attach grants all three.
 
 ### LiveObjects — the durable canvas state (source of truth)
 
@@ -81,31 +87,43 @@ The canvas panels (map, board, budget) should render **from LiveObjects state** 
 to its changes. When the AI writes a new stop, the board re-renders because the state changed —
 not because of a separate message.
 
-### Pub/Sub — ephemeral realtime events
+### Presence — who is on the trip
+
+**Presence** tracks who is currently viewing the trip, for the collaborator avatars. It runs on
+the same session channel via the session's `presence` accessor (presence is in the channel's
+default mode set, so sharing the channel needs nothing extra). Each browser enters the presence
+set while mounted and reads the live membership.
+
+### Ephemeral signals vs durable state
 
 Some things are signals, not state: a pin animating onto the map, or a collaborator joining.
-The durable facts already live in LiveObjects (the destination exists in the itinerary);
-Pub/Sub carries the transient event that drives the live animation or notification.
+The durable facts already live in LiveObjects (the destination exists in the itinerary), so the
+animation cue does not need its own message — when a destination is written to LiveObjects, the
+map drops its pin (with the drop animation) the moment that change arrives. There is no separate
+`:pins` channel: the durable write and the animation trigger are one and the same.
 
-- A channel like `trip:{tripId}:pins` carries pin-placement events for the map to animate.
-- **Presence** on a trip channel tracks who is currently viewing, for the collaborator avatars.
-
-Rule of thumb: if losing the message on reload is fine because the data is reconstructable from
-LiveObjects, it belongs on Pub/Sub. If it must survive reload, it belongs in LiveObjects.
+Rule of thumb: if losing a message on reload is fine because the data is reconstructable, drive
+the behaviour off the durable LiveObjects change rather than a separate ephemeral publish. If it
+must survive reload, it belongs in LiveObjects. Reserve a dedicated ephemeral pub/sub message
+only for a genuine signal that has no durable counterpart.
 
 ### AI Transport — the durable conversation
 
-The AI conversation for a trip is an AI Transport session on a channel like
-`trip:{tripId}:session`. AI Transport provides:
+The AI conversation for a trip is an AI Transport session on the trip's `trip:{tripId}:session`
+channel — the same channel that carries the LiveObjects state and presence. AI Transport
+provides:
 
 - **Token streaming** to the chat panel.
 - **Durability and resumption** — the session and its history survive tab closes and device
-  switches, restored from channel history on reconnect.
+  switches, restored from channel history on reconnect. History reconstruction
+  (`loadConversation()`) works even though the channel also carries LiveObjects object messages
+  and presence.
 - **Editing and branching** — revising an earlier turn creates a branch without destroying the
   original, which is how "swap a destination but keep the old plan" works.
 
-The browser uses the AI Transport client (and its React hooks) for the chat panel. The server
-uses the AI Transport server side together with the Vercel AI SDK.
+The browser uses the AI Transport client (and its React hooks) for the chat panel, and reads the
+same session's `object` / `presence` accessors for the canvas and avatars. The server uses the
+AI Transport server side together with the Vercel AI SDK.
 
 ---
 
@@ -147,8 +165,10 @@ Anthropic keys.
 
 - **Forgetting the mutable-messages namespace rule.** AI Transport silently misbehaves without
   it. This is the number-one setup mistake.
-- **Treating Pub/Sub as the source of truth.** If the map rebuilds only from pin events, pins
-  vanish on reload. Pins must be derivable from LiveObjects state; Pub/Sub only animates them.
+- **Treating an ephemeral signal as the source of truth.** If the map rebuilds only from
+  transient pin events, pins vanish on reload. Pins must be derivable from LiveObjects state;
+  here the drop animation is driven by the LiveObjects destination change itself, so it is
+  durable by construction.
 - **Putting the whole plan in the chat transcript.** If the plan lives in prose, the canvas is
   decorative. The structured items must be the canvas state.
 - **Holding the API key in the browser.** Always use issued tokens with a `clientId`.

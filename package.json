@@ -10,7 +10,7 @@
     "lint": "eslint"
   },
   "dependencies": {
-    "@ably/ai-transport": "^0.2.0",
+    "@ably/ai-transport": "^0.3.0",
     "@ai-sdk/anthropic": "^3.0.83",
     "@ai-sdk/react": "^3.0.204",
     "ably": "^2.22.1",
@@ -31,10 +31,5 @@
     "eslint-config-next": "16.2.9",
     "tailwindcss": "^4",
     "typescript": "^5"
-  },
-  "pnpm": {
-    "overrides": {
-      "postcss": ">=8.5.10"
-    }
   }
 }

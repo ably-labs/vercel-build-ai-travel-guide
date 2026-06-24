@@ -81,8 +81,10 @@ as the AI responds. Reloading the trip restores the board from LiveObjects. This
 
 **Scope:**
 - Map panel renders a pin per destination, driven by the trip state.
-- New pins appear live via a Pub/Sub event as the AI adds destinations (animation/realtime
-  signal over Pub/Sub; the durable pin data lives in LiveObjects).
+- New pins appear live as the AI adds destinations, with a drop animation. (Originally a
+  separate Pub/Sub `:pins` event; since consolidating onto a single session channel the
+  animation is driven directly by the LiveObjects destination change, so the durable write and
+  the animation cue are one and the same.)
 - Budget tracker shows a running total that updates live as priced items change.
 
 **Done when:** A single planning instruction visibly updates all three canvas panels — board,

@@ -2,7 +2,6 @@
 
 import { useChat } from "@ai-sdk/react";
 import {
-  ChatTransportProvider,
   useChatTransport,
   useMessageSync,
   useView,
@@ -11,7 +10,6 @@ import type { UIMessage } from "ai";
 import { useContext, useEffect, useRef, useState } from "react";
 
 import { RealtimeReadyContext } from "@/components/trip-realtime-provider";
-import { sessionChannelName } from "@/lib/channels";
 import { identityFor } from "@/lib/identity";
 import { getVisitorId } from "@/lib/visitor";
 
@@ -279,8 +277,9 @@ function ChatInner({ tripId }: { tripId: string }) {
   );
 }
 
-// The chat panel content. Requires a mounted AblyProvider, so it renders a
-// placeholder until the realtime provider is ready.
+// The chat panel content. The trip's session is opened upstream by the single
+// ChatTransportProvider in TripCanvas; this panel reads it via useChatTransport.
+// Renders a placeholder until that provider mounts (once the client is ready).
 export function ChatPanel({ tripId }: { tripId: string }) {
   const ready = useContext(RealtimeReadyContext);
 
@@ -292,13 +291,5 @@ export function ChatPanel({ tripId }: { tripId: string }) {
     );
   }
 
-  return (
-    <ChatTransportProvider
-      channelName={sessionChannelName(tripId)}
-      clientId={getVisitorId()}
-      api="/api/chat"
-    >
-      <ChatInner tripId={tripId} />
-    </ChatTransportProvider>
-  );
+  return <ChatInner tripId={tripId} />;
 }

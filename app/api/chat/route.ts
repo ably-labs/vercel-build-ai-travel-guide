@@ -1,14 +1,14 @@
 import { anthropic } from "@ai-sdk/anthropic";
-import { Invocation, type InvocationData } from "@ably/ai-transport";
+import { Invocation, type InvocationData, OBJECT_MODES } from "@ably/ai-transport";
 import { createAgentSession } from "@ably/ai-transport/vercel";
 import { convertToModelMessages, stepCountIs, streamText, tool } from "ai";
 import Ably from "ably";
 import { after } from "next/server";
 import { z } from "zod";
 
-import { pinsChannelName, tripIdFromSessionChannel } from "@/lib/channels";
+import { tripIdFromSessionChannel } from "@/lib/channels";
 import { sanitizeConversation } from "@/lib/sanitize-conversation";
-import { MAX_ITINERARY_ITEMS, type Destination } from "@/lib/trip-state";
+import { MAX_ITINERARY_ITEMS } from "@/lib/trip-state";
 import { TripStateWriter } from "@/lib/trip-state-server";
 
 export const runtime = "nodejs";
@@ -82,10 +82,7 @@ function slug(text: string): string {
   );
 }
 
-function buildTools(
-  writer: TripStateWriter,
-  announcePin: (destination: Destination) => void,
-) {
+function buildTools(writer: TripStateWriter) {
   return {
     set_trip_meta: tool({
       description:
@@ -111,7 +108,8 @@ function buildTools(
       execute: async ({ name, country, lat, lng }) => {
         const destination = { id: slug(name), name, country, lat, lng };
         await writer.addDestination(destination);
-        announcePin(destination);
+        // The map's pin-drop animation is driven by this LiveObjects write,
+        // which every client's map subscribes to.
         return { destinationId: destination.id };
       },
     }),
@@ -336,9 +334,12 @@ export async function POST(req: Request) {
   }
 
   const ably = new Ably.Realtime({ key: ablyApiKey });
+  // Carry LiveObjects on the session channel: the SDK unions OBJECT_MODES with
+  // the modes it always needs, so client and server attach one identical mode set.
   const session = createAgentSession({
     client: ably,
     channelName: invocation.sessionName,
+    channelModes: OBJECT_MODES,
   });
   await session.connect();
 
@@ -372,21 +373,11 @@ export async function POST(req: Request) {
   const writer = new TripStateWriter(tripId, ablyApiKey);
   await writer.ensureInitialized();
 
-  // Pin events are a fire-and-forget animation signal for the map; the
-  // durable destination is already in LiveObjects, so a lost event must not
-  // fail the tool call.
-  const pinsChannel = ably.channels.get(pinsChannelName(tripId));
-  const announcePin = (destination: Destination) => {
-    pinsChannel.publish("pin", destination).catch((error) => {
-      console.error("Pin event publish failed:", error);
-    });
-  };
-
   const result = streamText({
     model: anthropic("claude-sonnet-4-6"),
     system: SYSTEM_PROMPT,
     messages: await convertToModelMessages(messages),
-    tools: buildTools(writer, announcePin),
+    tools: buildTools(writer),
     stopWhen: stepCountIs(32),
     abortSignal: run.abortSignal,
   });
@@ -395,7 +386,9 @@ export async function POST(req: Request) {
   after(async () => {
     try {
       const { reason } = await run.pipe(result.toUIMessageStream());
-      await run.end(reason);
+      // run.end takes a discriminated RunEndParams in 0.3.0; the 'error' arm is
+      // separate, so narrow the pipe's terminal reason onto it.
+      await run.end(reason === "error" ? { reason } : { reason });
     } catch (error) {
       console.error("AI run failed:", error);
       // Node's console truncates nested objects to `[Object]` at depth 2, which
@@ -407,7 +400,7 @@ export async function POST(req: Request) {
           ? (error as { requestBodyValues?: unknown }).requestBodyValues
           : undefined;
       if (body) console.dir(body, { depth: null });
-      await run.end("error").catch(() => {});
+      await run.end({ reason: "error" }).catch(() => {});
     } finally {
       session.close();
       ably.close();

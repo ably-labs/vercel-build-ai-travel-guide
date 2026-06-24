@@ -125,14 +125,18 @@ sacrificeable under time pressure.
 
 ## 6. Ably product mapping (product-level)
 
-The product depends on three Ably products, each with a distinct role. Implementation detail
-lives in `ABLY_INTEGRATION.md`; this is the product-level division of responsibility.
+The product depends on three Ably products, each with a distinct role, all sharing **one**
+durable session channel per trip (`trip:{tripId}:session`). Implementation detail lives in
+`ABLY_INTEGRATION.md`; this is the product-level division of responsibility.
 
 | Ably product | Owns | Rationale |
 | --- | --- | --- |
-| **LiveObjects** | The durable canvas state: itinerary (days, stops, bookings) and budget. | The AI and all collaborators write to one shared, conflict-free state. No bespoke sync, no race conditions. This is the source of truth for the canvas. |
-| **Pub/Sub** | Ephemeral realtime events: map pin animations, collaborator presence. | These are transient signals, not data to be replayed on load — the underlying data already lives in LiveObjects. Pub/Sub fires the live updates. |
-| **AI Transport** | The AI conversation as a durable, resumable session, including token streaming and the ability to revise earlier turns. | The session that drives the canvas must survive tab closes and device switches, and support editing/branching the plan. |
+| **LiveObjects** | The durable canvas state: itinerary (days, stops, bookings) and budget. | The AI and all collaborators write to one shared, conflict-free state. No bespoke sync, no race conditions. This is the source of truth for the canvas. Shares the session channel via `channelModes: OBJECT_MODES`. |
+| **Presence** | Who is currently viewing the trip, for the collaborator avatars. | A transient signal, not data to be replayed on load. Rides the same session channel (presence is in its default mode set). |
+| **AI Transport** | The AI conversation as a durable, resumable session, including token streaming and the ability to revise earlier turns. | The session that drives the canvas must survive tab closes and device switches, and support editing/branching the plan. Owns the channel that the other two share. |
+
+Map pin animations are driven by the LiveObjects destination change itself, not a separate
+ephemeral message — so there is no dedicated Pub/Sub channel for them.
 
 ---
 
