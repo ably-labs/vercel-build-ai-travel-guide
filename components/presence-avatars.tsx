@@ -1,21 +1,23 @@
 "use client";
 
-import { ChannelProvider, usePresence, usePresenceListener } from "ably/react";
+import { usePresence, usePresenceListener } from "ably/react";
 import { useContext } from "react";
 
 import { RealtimeReadyContext } from "@/components/trip-realtime-provider";
-import { presenceChannelName } from "@/lib/channels";
-// The same deterministic identity (name + initials + colour) used here for
-// presence avatars is reused for chat message attribution, so a given
-// collaborator looks identical in the nav bar and in the chat list.
+import { sessionChannelName } from "@/lib/channels";
+// The deterministic identity (name + initials + colour) is shared with chat
+// message attribution, so a collaborator looks the same in the nav bar and chat.
 import { identityFor } from "@/lib/identity";
 import { getVisitorId } from "@/lib/visitor";
 
 const MAX_AVATARS = 5;
 
-function AvatarStack({ channelName }: { channelName: string }) {
-  // Enter the presence set for as long as the avatar stack is mounted, and
-  // re-render from the live membership snapshot as others come and go.
+function AvatarStack({ tripId }: { tripId: string }) {
+  // Presence rides the trip's session channel. The ChatTransportProvider above
+  // renders that channel's ChannelProvider, so these ably/react hooks resolve
+  // it with no wrapper of our own: usePresence keeps us in the set while
+  // mounted, usePresenceListener tracks the live membership.
+  const channelName = sessionChannelName(tripId);
   usePresence(channelName);
   const { presenceData } = usePresenceListener(channelName);
 
@@ -71,17 +73,13 @@ function AvatarStack({ channelName }: { channelName: string }) {
 }
 
 // Collaborator avatars for the trip header: everyone currently viewing this
-// trip, live via Ably presence. Renders nothing until the realtime provider
-// is mounted, since the presence hooks need a live AblyProvider above them.
+// trip, live via Ably presence on the session channel. Renders nothing until
+// the realtime provider is mounted, since the presence hooks need the session
+// channel's ChannelProvider (and a live AblyProvider) above them.
 export function PresenceAvatars({ tripId }: { tripId: string }) {
   const ready = useContext(RealtimeReadyContext);
   if (!ready) {
     return null;
   }
-  const channelName = presenceChannelName(tripId);
-  return (
-    <ChannelProvider channelName={channelName}>
-      <AvatarStack channelName={channelName} />
-    </ChannelProvider>
-  );
+  return <AvatarStack tripId={tripId} />;
 }

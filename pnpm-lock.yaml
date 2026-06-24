@@ -12,8 +12,8 @@ importers:
   .:
     dependencies:
       '@ably/ai-transport':
-        specifier: ^0.2.0
-        version: 0.2.0(ably@2.22.1(react-dom@19.2.4(react@19.2.4))(react@19.2.4))(ai@6.0.202(zod@4.4.3))(react@19.2.4)
+        specifier: ^0.3.0
+        version: 0.3.0(ably@2.22.1(react-dom@19.2.4(react@19.2.4))(react@19.2.4))(ai@6.0.202(zod@4.4.3))(react@19.2.4)
       '@ai-sdk/anthropic':
         specifier: ^3.0.83
         version: 3.0.83(zod@4.4.3)
@@ -72,11 +72,11 @@ importers:
 
 packages:
 
-  '@ably/ai-transport@0.2.0':
-    resolution: {integrity: sha512-viNb1+rCZAu94zQOLUgWr51Prm0GJ/ilWy+IBSsDoDZvLzQyEyEYbkInkihPsaZ75ezXH002pOKTbpI10W9r7A==}
+  '@ably/ai-transport@0.3.0':
+    resolution: {integrity: sha512-3FDXJl/Yu/UHZiZ3TcVBfEudSwv8EOdT1etiYo02uEhZyZtVNNbLhG4DgvVq/L30DcjG9opA0HVSkR+qSxb5uA==}
     engines: {node: '>=22.0.0'}
     peerDependencies:
-      ably: ^2.21.0
+      ably: ^2.23.0
       ai: ^6
       react: ^18.0.0 || ^19.0.0
     peerDependenciesMeta:
@@ -2311,7 +2311,7 @@ packages:
 
 snapshots:
 
-  '@ably/ai-transport@0.2.0(ably@2.22.1(react-dom@19.2.4(react@19.2.4))(react@19.2.4))(ai@6.0.202(zod@4.4.3))(react@19.2.4)':
+  '@ably/ai-transport@0.3.0(ably@2.22.1(react-dom@19.2.4(react@19.2.4))(react@19.2.4))(ai@6.0.202(zod@4.4.3))(react@19.2.4)':
     dependencies:
       ably: 2.22.1(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
     optionalDependencies:

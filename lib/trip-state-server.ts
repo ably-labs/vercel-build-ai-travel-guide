@@ -1,7 +1,7 @@
 import Ably from "ably";
 import { LiveObjects, type RestObjectOperation } from "ably/liveobjects";
 
-import { stateChannelName } from "@/lib/channels";
+import { sessionChannelName } from "@/lib/channels";
 import type {
   DayJson,
   Destination,
@@ -59,15 +59,16 @@ function sumStopPrices(
   return total;
 }
 
-// Server-side writer for a trip's LiveObjects state. Uses the REST object
-// API (stateless HTTP — right for a serverless route) with path-based,
-// atomic batch operations.
+// Server-side writer for a trip's LiveObjects state. Uses the REST object API
+// (stateless HTTP, right for a serverless route) with path-based, atomic batch
+// operations on the trip's session channel. REST object ops don't attach with
+// channel modes, so sharing that channel needs no mode config here.
 export class TripStateWriter {
   private channel;
 
   constructor(tripId: string, apiKey: string) {
     const rest = new Ably.Rest({ key: apiKey, plugins: { LiveObjects } });
-    this.channel = rest.channels.get(stateChannelName(tripId));
+    this.channel = rest.channels.get(sessionChannelName(tripId));
   }
 
   // Create the fixed top-level structure if this trip has never been written

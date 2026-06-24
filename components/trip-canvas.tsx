@@ -1,5 +1,9 @@
 "use client";
 
+import { OBJECT_MODES } from "@ably/ai-transport";
+import { ChatTransportProvider } from "@ably/ai-transport/vercel/react";
+import { useContext } from "react";
+
 import { BudgetPanel } from "@/components/budget-panel";
 import { ChatPanel } from "@/components/chat-panel";
 import { ConnectionBadge } from "@/components/connection-badge";
@@ -7,6 +11,8 @@ import { DayBoard } from "@/components/day-board";
 import { MapPanel } from "@/components/map-panel";
 import { PresenceAvatars } from "@/components/presence-avatars";
 import { SelectedStopProvider } from "@/components/selected-stop";
+import { RealtimeReadyContext } from "@/components/trip-realtime-provider";
+import { sessionChannelName } from "@/lib/channels";
 
 function Panel({
   title,
@@ -48,10 +54,8 @@ function Panel({
   );
 }
 
-// The static four-region canvas for Milestone 0: map, day board, budget, and
-// chat, with no live content yet. Later milestones fill each region from
-// LiveObjects state and the AI Transport session.
-export function TripCanvas({ tripId }: { tripId: string }) {
+// The trip canvas body: map, itinerary, budget, and chat.
+function CanvasBody({ tripId }: { tripId: string }) {
   return (
     <div className="flex h-dvh flex-col bg-zinc-50 dark:bg-zinc-950">
       <header className="flex items-center justify-between gap-2 border-b border-zinc-200 bg-white px-3 py-3 sm:px-4 dark:border-zinc-800 dark:bg-zinc-900">
@@ -93,5 +97,33 @@ export function TripCanvas({ tripId }: { tripId: string }) {
         </main>
       </SelectedStopProvider>
     </div>
+  );
+}
+
+// One ChatTransportProvider opens the trip's session and shares it with every
+// panel: chat reads it via useChatTransport; the canvas and presence read the
+// same channel via useClientSession and the ably/react hooks.
+//
+// channelModes={OBJECT_MODES} lets LiveObjects share the channel; the SDK
+// unions it with the modes it always needs, so presence and the conversation
+// ride along too. Mounts only once the realtime client is ready, so each panel
+// server-renders a placeholder until then.
+export function TripCanvas({ tripId }: { tripId: string }) {
+  const ready = useContext(RealtimeReadyContext);
+
+  if (!ready) {
+    return <CanvasBody tripId={tripId} />;
+  }
+
+  // clientId comes from the Ably connection token (TripRealtimeProvider sets
+  // authParams.clientId).
+  return (
+    <ChatTransportProvider
+      channelName={sessionChannelName(tripId)}
+      channelModes={OBJECT_MODES}
+      api="/api/chat"
+    >
+      <CanvasBody tripId={tripId} />
+    </ChatTransportProvider>
   );
 }

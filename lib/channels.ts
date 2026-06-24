@@ -1,28 +1,10 @@
-// Channel naming for a trip. Everything about a trip is namespaced under
-// trip:{tripId}:* (the `trip` namespace rule has mutable messages and
-// persistence enabled, which AI Transport requires).
+// Channel naming for a trip. Chat, the LiveObjects canvas state, and presence
+// all share one channel, trip:{tripId}:session. The `trip` namespace rule
+// enables mutable messages and persistence, which AI Transport requires.
 import { isValidTripId } from "@/lib/trip-id";
 
 export function sessionChannelName(tripId: string): string {
   return `trip:${tripId}:session`;
-}
-
-export function stateChannelName(tripId: string): string {
-  return `trip:${tripId}:state`;
-}
-
-// Ephemeral pin-placement events for the map animation. The durable pin data
-// lives in LiveObjects (the destinations map on the state channel); losing
-// one of these on reload is fine.
-export function pinsChannelName(tripId: string): string {
-  return `trip:${tripId}:pins`;
-}
-
-// Who is currently viewing the trip, via Ably presence. Kept separate from
-// the state channel (which attaches with object-only modes) so the presence
-// set attaches with the default modes presence needs.
-export function presenceChannelName(tripId: string): string {
-  return `trip:${tripId}:presence`;
 }
 
 // Parse and validate a session channel name received from the network.
